@@ -1,0 +1,96 @@
+python is a programming language used for scripting, automation, data analysis and machine learning.
+pytorch is a tensor library for building neural networks with automatic differentiation.
+a transformer language model predicts the next token from the previous context.
+self attention lets each token compare itself with earlier tokens in the sequence.
+the training loop computes logits, cross entropy loss, gradients and optimizer updates.
+small models are useful for experiments because every tensor shape can be inspected.
+a dataset should contain enough varied text to teach the tokenizer common fragments.
+during inference the model samples one token at a time using temperature and filtering.
+python is a programming language used for scripting, automation, data analysis and machine learning.
+pytorch is a tensor library for building neural networks with automatic differentiation.
+a transformer language model predicts the next token from the previous context.
+self attention lets each token compare itself with earlier tokens in the sequence.
+the training loop computes logits, cross entropy loss, gradients and optimizer updates.
+small models are useful for experiments because every tensor shape can be inspected.
+a dataset should contain enough varied text to teach the tokenizer common fragments.
+during inference the model samples one token at a time using temperature and filtering.
+python is a programming language used for scripting, automation, data analysis and machine learning.
+pytorch is a tensor library for building neural networks with automatic differentiation.
+a transformer language model predicts the next token from the previous context.
+self attention lets each token compare itself with earlier tokens in the sequence.
+the training loop computes logits, cross entropy loss, gradients and optimizer updates.
+small models are useful for experiments because every tensor shape can be inspected.
+a dataset should contain enough varied text to teach the tokenizer common fragments.
+during inference the model samples one token at a time using temperature and filtering.
+python is a programming language used for scripting, automation, data analysis and machine learning.
+pytorch is a tensor library for building neural networks with automatic differentiation.
+a transformer language model predicts the next token from the previous context.
+self attention lets each token compare itself with earlier tokens in the sequence.
+the training loop computes logits, cross entropy loss, gradients and optimizer updates.
+small models are useful for experiments because every tensor shape can be inspected.
+a dataset should contain enough varied text to teach the tokenizer common fragments.
+during inference the model samples one token at a time using temperature and filtering.
+python is a programming language used for scripting, automation, data analysis and machine learning.
+pytorch is a tensor library for building neural networks with automatic differentiation.
+a transformer language model predicts the next token from the previous context.
+self attention lets each token compare itself with earlier tokens in the sequence.
+the training loop computes logits, cross entropy loss, gradients and optimizer updates.
+small models are useful for experiments because every tensor shape can be inspected.
+a dataset should contain enough varied text to teach the tokenizer common fragments.
+during inference the model samples one token at a time using temperature and filtering.
+python is a programming language used for scripting, automation, data analysis and machine learning.
+pytorch is a tensor library for building neural networks with automatic differentiation.
+a transformer language model predicts the next token from the previous context.
+self attention lets each token compare itself with earlier tokens in the sequence.
+the training loop computes logits, cross entropy loss, gradients and optimizer updates.
+small models are useful for experiments because every tensor shape can be inspected.
+a dataset should contain enough varied text to teach the tokenizer common fragments.
+during inference the model samples one token at a time using temperature and filtering.
+python is a programming language used for scripting, automation, data analysis and machine learning.
+pytorch is a tensor library for building neural networks with automatic differentiation.
+a transformer language model predicts the next token from the previous context.
+self attention lets each token compare itself with earlier tokens in the sequence.
+the training loop computes logits, cross entropy loss, gradients and optimizer updates.
+small models are useful for experiments because every tensor shape can be inspected.
+a dataset should contain enough varied text to teach the tokenizer common fragments.
+during inference the model samples one token at a time using temperature and filtering.
+python is a programming language used for scripting, automation, data analysis and machine learning.
+pytorch is a tensor library for building neural networks with automatic differentiation.
+a transformer language model predicts the next token from the previous context.
+self attention lets each token compare itself with earlier tokens in the sequence.
+the training loop computes logits, cross entropy loss, gradients and optimizer updates.
+small models are useful for experiments because every tensor shape can be inspected.
+a dataset should contain enough varied text to teach the tokenizer common fragments.
+during inference the model samples one token at a time using temperature and filtering.
+python is a programming language used for scripting, automation, data analysis and machine learning.
+pytorch is a tensor library for building neural networks with automatic differentiation.
+a transformer language model predicts the next token from the previous context.
+self attention lets each token compare itself with earlier tokens in the sequence.
+the training loop computes logits, cross entropy loss, gradients and optimizer updates.
+small models are useful for experiments because every tensor shape can be inspected.
+a dataset should contain enough varied text to teach the tokenizer common fragments.
+during inference the model samples one token at a time using temperature and filtering.
+python is a programming language used for scripting, automation, data analysis and machine learning.
+pytorch is a tensor library for building neural networks with automatic differentiation.
+a transformer language model predicts the next token from the previous context.
+self attention lets each token compare itself with earlier tokens in the sequence.
+the training loop computes logits, cross entropy loss, gradients and optimizer updates.
+small models are useful for experiments because every tensor shape can be inspected.
+a dataset should contain enough varied text to teach the tokenizer common fragments.
+during inference the model samples one token at a time using temperature and filtering.
+python is a programming language used for scripting, automation, data analysis and machine learning.
+pytorch is a tensor library for building neural networks with automatic differentiation.
+a transformer language model predicts the next token from the previous context.
+self attention lets each token compare itself with earlier tokens in the sequence.
+the training loop computes logits, cross entropy loss, gradients and optimizer updates.
+small models are useful for experiments because every tensor shape can be inspected.
+a dataset should contain enough varied text to teach the tokenizer common fragments.
+during inference the model samples one token at a time using temperature and filtering.
+python is a programming language used for scripting, automation, data analysis and machine learning.
+pytorch is a tensor library for building neural networks with automatic differentiation.
+a transformer language model predicts the next token from the previous context.
+self attention lets each token compare itself with earlier tokens in the sequence.
+the training loop computes logits, cross entropy loss, gradients and optimizer updates.
+small models are useful for experiments because every tensor shape can be inspected.
+a dataset should contain enough varied text to teach the tokenizer common fragments.
+during inference the model samples one token at a time using temperature and filtering.
