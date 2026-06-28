@@ -1,4 +1,5 @@
 import argparse
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -16,6 +17,8 @@ class TeeLogger:
     def write(self, text):
         self.stream.write(text)
         self.file.write(text)
+        if "\n" in text:
+            self.flush()
 
     def flush(self):
         self.stream.flush()
@@ -32,6 +35,7 @@ def build_parser():
     parser.add_argument("--mode", choices=["debug", "standard", "production"], default="standard")
     parser.add_argument("--data_dir", default="data/raw")
     parser.add_argument("--data_source", action="append", default=[], help="Sorgente testo opzionale path:weight.")
+    parser.add_argument("--max_train_chars", type=int, default=0, help="Limita i caratteri grezzi da tokenizzare. 0 = tutto.")
     parser.add_argument("--tokenizer", default="tokenizer/tokenizer.json")
     parser.add_argument("--processed", default="data/processed/real_tokens.pt")
     parser.add_argument("--checkpoint_dir", default="models/checkpoints")
@@ -43,13 +47,34 @@ def build_parser():
     parser.add_argument("--grad_clip", type=float, default=1.0)
     parser.add_argument("--val_fraction", type=float, default=0.05)
     parser.add_argument("--eval_every", type=int, default=100)
+    parser.add_argument("--eval_batches", type=int, default=20)
     parser.add_argument("--save_every", type=int, default=0)
     parser.add_argument("--log_every", type=int, default=10)
     parser.add_argument("--patience", type=int, default=3)
     parser.add_argument("--stride", type=int, default=1)
     parser.add_argument("--num_workers", type=int, default=0)
     parser.add_argument("--gradient_checkpointing", action="store_true")
+    parser.add_argument("--fp16", action="store_true", help="Forza mixed precision FP16 quando CUDA e disponibile.")
+    parser.add_argument(
+        "--gpu_memory_fraction",
+        type=float,
+        default=0.70,
+        help="Frazione massima di VRAM usabile dal processo CUDA. 0 disabilita.",
+    )
+    parser.add_argument(
+        "--gpu_duty_cycle",
+        type=float,
+        default=0.70,
+        help="Compat legacy: ignorato. Il training usa solo controllo temperatura.",
+    )
+    parser.add_argument("--gpu_max_utilization", type=int, default=0, help="Compat legacy: ignorato.")
+    parser.add_argument("--gpu_max_temp", type=int, default=80, help="Temperatura massima GPU prima di attendere. 0 disabilita.")
+    parser.add_argument("--thermal_check_every", type=int, default=1, help="Controlla termiche ogni N step.")
+    parser.add_argument("--thermal_cooldown_seconds", type=float, default=10.0, help="Pausa quando GPU supera soglie termiche.")
+    parser.add_argument("--no_dynamic_batch", action="store_true", help="Disabilita riduzione automatica batch su CUDA.")
+    parser.add_argument("--no_dynamic_context", action="store_true", help="Disabilita riduzione automatica seq_len su CUDA.")
     parser.add_argument("--resume", default=None)
+    parser.add_argument("--no_resume", action="store_true", help="Disabilita il resume automatico da last checkpoint.")
     parser.add_argument("--stats_path", default="data/logs/training_stats.csv")
     parser.add_argument("--log_path", default="data/logs/training.log")
     parser.add_argument("--plots_dir", default="data/plots")
@@ -109,18 +134,27 @@ def prepare_demo_assets(args):
 
 
 def ensure_real_assets(args):
-    dataset_path = Path(args.data_dir) / "dataset.txt"
+    data_dir = Path(args.data_dir)
+    large_dataset = data_dir / "dataset_large.txt"
+    default_dataset = data_dir / "dataset.txt"
+    dataset_path = large_dataset if large_dataset.exists() else default_dataset
     if not dataset_path.exists():
         raise FileNotFoundError(
             f"Dataset non trovato: {dataset_path}. "
-            "Crea il dataset con: python data/raw/prepare_dataset.py --out data/raw/dataset.txt"
+            "Crea il dataset con: python data/raw/prepare_dataset.py --out data/raw/dataset.txt "
+            "oppure python data/raw/build_dataset.py"
         )
+    if large_dataset.exists():
+        args.data_dir = str(large_dataset)
+        if Path(args.processed).name == "real_tokens.pt":
+            args.processed = "data/processed/large_tokens.pt"
+        print(f"dataset grande rilevato: {large_dataset}")
 
     tokenizer_path = Path(args.tokenizer)
     if not tokenizer_path.exists():
         print("tokenizer non trovato: lo costruisco dal dataset reale")
         text = dataset_path.read_text(encoding="utf-8", errors="ignore")
-        tokenizer = train_byte_bpe(text, vocab_size=512)
+        tokenizer = train_byte_bpe(text, vocab_size=args.vocab_size or 8192)
         tokenizer_path.parent.mkdir(parents=True, exist_ok=True)
         tokenizer.save_model(tokenizer_path)
 
@@ -133,10 +167,40 @@ def apply_training_defaults(args):
     if args.min_lr is None:
         args.min_lr = args.lr * 0.1
 
-    last_checkpoint = Path(args.checkpoint_dir) / "last.pt"
+    is_32m = getattr(args, "model_size", None) == "mini_llm_32m"
+    last_name = "mini_llm_32m_last.pt" if is_32m else "last.pt"
+    last_checkpoint = Path(args.checkpoint_dir) / last_name
+    if args.no_resume:
+        args.resume = None
+        return
     if args.resume is None and last_checkpoint.exists():
+        tokenizer_path = Path(args.tokenizer)
+        if tokenizer_path.exists() and tokenizer_path.stat().st_mtime > last_checkpoint.stat().st_mtime:
+            print(
+                "resume automatico saltato: tokenizer piu recente del checkpoint. "
+                "Avvio training da zero per evitare mismatch tokenizer/checkpoint."
+            )
+            return
         args.resume = str(last_checkpoint)
         print(f"resume automatico da {args.resume}")
+
+
+def publish_named_checkpoints(args):
+    if getattr(args, "model_size", None) != "mini_llm_32m":
+        return []
+    checkpoint_dir = Path(args.checkpoint_dir)
+    mapping = {
+        "best.pt": "mini_llm_32m_best.pt",
+        "last.pt": "mini_llm_32m_last.pt",
+    }
+    published = []
+    for src_name, dst_name in mapping.items():
+        src = checkpoint_dir / src_name
+        dst = checkpoint_dir / dst_name
+        if src.exists():
+            shutil.copy2(src, dst)
+            published.append(dst)
+    return published
 
 
 def main():
@@ -171,7 +235,8 @@ def _main(args):
     print(
         f"training: batch_size={args.batch_size} | epochs={args.epochs} | "
         f"max_steps={args.max_steps} | lr={args.lr} | scheduler={args.scheduler} | "
-        f"warmup_steps={args.warmup_steps} | patience={args.patience}"
+        f"warmup_steps={args.warmup_steps} | patience={args.patience} | "
+        f"gpu_memory_fraction={args.gpu_memory_fraction} | gpu_max_temp={args.gpu_max_temp}"
     )
 
     try:
@@ -183,6 +248,8 @@ def _main(args):
         raise
 
     final_path = train_model(args, config=config)
+    for path in publish_named_checkpoints(args):
+        print(f"checkpoint 32M pubblicato: {path}")
     make_plots(args.stats_path, args.plots_dir)
     print(f"grafici salvati in {args.plots_dir}")
 

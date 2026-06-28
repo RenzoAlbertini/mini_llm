@@ -49,13 +49,16 @@ def load_raw_text(data_dir, sources=None):
     return "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in paths)
 
 
-def load_or_tokenize(data_dir, tokenizer_path, processed_path, add_eos=True, sources=None):
+def load_or_tokenize(data_dir, tokenizer_path, processed_path, add_eos=True, sources=None, max_chars=0):
     processed_path = Path(processed_path)
     if processed_path.exists():
         return torch.load(processed_path)
 
     tokenizer = BPETokenizer.load_model(tokenizer_path)
     text = load_raw_text(data_dir, sources=sources)
+    if max_chars and len(text) > max_chars:
+        print(f"tokenizzazione: uso {max_chars:,} caratteri su {len(text):,}", flush=True)
+        text = text[:max_chars]
     ids = tokenizer.encode(text, add_eos=add_eos)
     tokens = torch.tensor(ids, dtype=torch.long)
     processed_path.parent.mkdir(parents=True, exist_ok=True)

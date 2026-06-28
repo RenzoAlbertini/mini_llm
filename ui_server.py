@@ -12,9 +12,10 @@ from fastapi.staticfiles import StaticFiles
 
 
 class UIRuntime:
-    def __init__(self, checkpoint, quantized_checkpoint, tokenizer_path):
+    def __init__(self, checkpoint, quantized_checkpoint, tokenizer_path, finetuned_checkpoint=None):
         self.checkpoint = checkpoint
         self.quantized_checkpoint = quantized_checkpoint
+        self.finetuned_checkpoint = finetuned_checkpoint or "models/checkpoints/mini_llm_32m_finetuned.pt"
         self.tokenizer_path = tokenizer_path
         self.loaded = {}
         self.tokenizer = None
@@ -32,7 +33,9 @@ class UIRuntime:
         except ModuleNotFoundError:
             return False
 
-    def load(self, model_type="fp32"):
+    def load(self, model_type="32m"):
+        if model_type == "demo":
+            return None
         if model_type in self.loaded:
             return self.loaded[model_type]
 
@@ -43,8 +46,13 @@ class UIRuntime:
 
             self.device = get_device()
             self.tokenizer = self.tokenizer or BPETokenizer.load_model(self.tokenizer_path)
-            quantized = model_type == "8bit"
-            checkpoint = self.quantized_checkpoint if quantized and self.quantized_checkpoint else self.checkpoint
+            quantized = model_type in {"32m-4bit", "8bit"}
+            if model_type == "finetuned":
+                checkpoint = self.finetuned_checkpoint
+            elif quantized and self.quantized_checkpoint:
+                checkpoint = self.quantized_checkpoint
+            else:
+                checkpoint = self.checkpoint
             model = load_model(checkpoint, self.device, quantized=quantized)
 
             if model_type == "fp16" and self.device.type == "cuda":
@@ -64,24 +72,19 @@ class UIRuntime:
     def available_models(self):
         return [
             {
-                "id": "fp32",
-                "label": "FP32",
+                "id": "32m",
+                "label": "MiniLLM-32M",
                 "available": Path(self.checkpoint).exists() and self.torch_available,
             },
             {
-                "id": "fp16",
-                "label": "FP16",
-                "available": Path(self.checkpoint).exists() and self.torch_available,
-            },
-            {
-                "id": "bf16",
-                "label": "BF16",
-                "available": Path(self.checkpoint).exists() and self.torch_available,
-            },
-            {
-                "id": "8bit",
-                "label": "8-bit",
+                "id": "32m-4bit",
+                "label": "MiniLLM-32M 4-bit",
                 "available": bool(self.quantized_checkpoint) and Path(self.quantized_checkpoint).exists() and self.torch_available,
+            },
+            {
+                "id": "finetuned",
+                "label": "Finetuned",
+                "available": Path(self.finetuned_checkpoint).exists() and self.torch_available,
             },
             {
                 "id": "demo",
@@ -92,17 +95,12 @@ class UIRuntime:
 
     def metrics(self):
         ram = memory_info()
-        vram = {"available": False, "allocated": None, "reserved": None}
+        vram = {"available": False, "allocated": None, "reserved": None, "total": None, "free": None, "used_percent": None}
         if self.torch_available:
             try:
-                import torch
+                from memory_manager import MemoryManager
 
-                if torch.cuda.is_available():
-                    vram = {
-                        "available": True,
-                        "allocated": int(torch.cuda.memory_allocated()),
-                        "reserved": int(torch.cuda.memory_reserved()),
-                    }
+                vram = MemoryManager().vram_stats()
             except Exception:
                 pass
         return {
@@ -159,12 +157,12 @@ def demo_tokens(prompt, max_new_tokens):
 
 
 async def stream_real(runtime, websocket, payload):
-    model_type = payload.get("model", "fp32")
+    model_type = payload.get("model", "32m")
     model = runtime.load(model_type)
-    if model is None and runtime.quantized_checkpoint:
-        await websocket.send_json({"type": "status", "message": "fallback to 8-bit model"})
-        model_type = "8bit"
-        model = runtime.load("8bit")
+    if model is None and runtime.quantized_checkpoint and Path(runtime.quantized_checkpoint).exists():
+        await websocket.send_json({"type": "status", "message": "fallback to 4-bit model"})
+        model_type = "32m-4bit"
+        model = runtime.load("32m-4bit")
 
     prompt = payload.get("prompt", "")
     max_new_tokens = int(payload.get("max_new_tokens", 120))
@@ -190,9 +188,13 @@ async def stream_real(runtime, websocket, payload):
         from inference.generate import top_k_filter, top_p_filter
         import torch.nn.functional as F
 
+        dynamic_context = bool(payload.get("dynamic_context", True))
+        max_context = int(payload.get("max_context", model.config.seq_len))
+
         with torch.no_grad():
             for _ in range(max_new_tokens):
-                x_cond = x[:, -model.config.seq_len:]
+                context_limit = min(model.config.seq_len, max_context) if dynamic_context else model.config.seq_len
+                x_cond = x[:, -context_limit:]
                 logits, _ = model(x_cond)
                 logits = logits[:, -1, :] / max(temperature, 1e-6)
                 logits = top_k_filter(logits, top_k)
@@ -203,6 +205,11 @@ async def stream_real(runtime, websocket, payload):
                 token = runtime.tokenizer.decode([next_id.item()])
                 await websocket.send_json({"type": "token", "text": token})
                 count += 1
+                if count % 8 == 0:
+                    elapsed_now = max(1e-6, time.perf_counter() - start)
+                    runtime.last_tokens_per_second = count / elapsed_now
+                    runtime.last_latency_ms = elapsed_now / max(1, count) * 1000.0
+                    await websocket.send_json({"type": "metrics", "metrics": runtime.metrics()})
                 if next_id.item() == runtime.tokenizer.eos_id:
                     break
 
@@ -286,17 +293,19 @@ def discover_optional_items(paths):
 
 
 DEFAULT_RUNTIME = UIRuntime(
-    checkpoint=os.environ.get("MINI_LLM_CHECKPOINT", "checkpoints/final.pt"),
-    quantized_checkpoint=os.environ.get("MINI_LLM_QUANTIZED_CHECKPOINT", "checkpoints/final_quantized.pt"),
+    checkpoint=os.environ.get("MINI_LLM_CHECKPOINT", "models/checkpoints/mini_llm_32m_best.pt"),
+    quantized_checkpoint=os.environ.get("MINI_LLM_QUANTIZED_CHECKPOINT", "models/quantized/mini_llm_32m_4bit.pt"),
     tokenizer_path=os.environ.get("MINI_LLM_TOKENIZER", "tokenizer/tokenizer.json"),
+    finetuned_checkpoint=os.environ.get("MINI_LLM_FINETUNED_CHECKPOINT", "models/checkpoints/mini_llm_32m_finetuned.pt"),
 )
 app = create_app(DEFAULT_RUNTIME)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Avvia la UI web interattiva mini_llm.")
-    parser.add_argument("--checkpoint", default="checkpoints/final.pt")
-    parser.add_argument("--quantized_checkpoint", default="checkpoints/final_quantized.pt")
+    parser.add_argument("--checkpoint", default="models/checkpoints/mini_llm_32m_best.pt")
+    parser.add_argument("--quantized_checkpoint", default="models/quantized/mini_llm_32m_4bit.pt")
+    parser.add_argument("--finetuned_checkpoint", default="models/checkpoints/mini_llm_32m_finetuned.pt")
     parser.add_argument("--tokenizer", default="tokenizer/tokenizer.json")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
@@ -305,7 +314,7 @@ def main():
 
     import uvicorn
 
-    runtime = UIRuntime(args.checkpoint, args.quantized_checkpoint, args.tokenizer)
+    runtime = UIRuntime(args.checkpoint, args.quantized_checkpoint, args.tokenizer, args.finetuned_checkpoint)
     local_app = create_app(runtime)
     print(f"mini_llm UI: http://{args.host}:{args.port}/ui")
     uvicorn.run(local_app, host=args.host, port=args.port, reload=args.reload)

@@ -7,6 +7,7 @@ from model.config import ModelConfig
 from model.transformer import MiniTransformerLM
 from tokenizer.tokenizer import BPETokenizer
 from utils.helpers import get_device, load_checkpoint, set_seed
+from utils.quantize_4bit import load_4bit_model
 from utils.quantization import load_quantized_model
 
 
@@ -174,6 +175,9 @@ def load_model(checkpoint_path, device, quantized=False):
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         config = ModelConfig.from_dict(checkpoint["config"])
         model = MiniTransformerLM(config).to(device)
+        if checkpoint.get("quantization") == "4bit":
+            model, _ = load_4bit_model(checkpoint_path, model, dtype=torch.float16 if device.type == "cuda" else torch.float32, device=device)
+            return model
         model, _ = load_quantized_model(checkpoint_path, model, device=device)
         return model
 

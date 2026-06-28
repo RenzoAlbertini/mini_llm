@@ -3,13 +3,14 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from model.config import ModelConfig
+from model.config import ModelConfig, mini_llm_32m
 
 
 MODEL_PRESETS = {
     "small": ModelConfig(seq_len=128, d_model=256, n_layers=4, n_heads=4, d_ff=1024, dropout=0.1),
     "medium": ModelConfig(seq_len=256, d_model=512, n_layers=6, n_heads=8, d_ff=2048, dropout=0.1),
     "large": ModelConfig(seq_len=512, d_model=768, n_layers=10, n_heads=12, d_ff=3072, dropout=0.1),
+    "mini_llm_32m": mini_llm_32m(),
 }
 
 
@@ -31,6 +32,10 @@ class TrainingConfig:
     curriculum_start_seq_len: int = 64
     curriculum_step_size: int = 200
     curriculum_increment: int = 64
+    gpu_memory_fraction: float = 0.70
+    gpu_max_temp: int = 80
+    thermal_check_every: int = 1
+    thermal_cooldown_seconds: float = 10.0
 
     def to_dict(self):
         return asdict(self)
@@ -38,6 +43,7 @@ class TrainingConfig:
 
 def add_config_args(parser):
     parser.add_argument("--preset", choices=sorted(MODEL_PRESETS), default="small")
+    parser.add_argument("--model_size", choices=sorted(MODEL_PRESETS), default=None, help="Alias leggibile per --preset.")
     parser.add_argument("--config", default=None, help="JSON opzionale con model/training config.")
     parser.add_argument("--seq_len", type=int, default=None)
     parser.add_argument("--d_model", type=int, default=None)
@@ -63,10 +69,9 @@ def load_config_file(path):
 
 
 def build_configs(args):
-    model_config = MODEL_PRESETS[getattr(args, "preset", "small")].__class__(
-        **MODEL_PRESETS[getattr(args, "preset", "small")].to_dict()
-    )
-    training_config = TrainingConfig(preset=getattr(args, "preset", "small"))
+    preset_name = getattr(args, "model_size", None) or getattr(args, "preset", "small")
+    model_config = ModelConfig.from_dict(MODEL_PRESETS[preset_name].to_dict())
+    training_config = TrainingConfig(preset=preset_name)
 
     if getattr(args, "config", None):
         model_values, training_values = load_config_file(args.config)

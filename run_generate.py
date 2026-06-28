@@ -2,6 +2,7 @@ import argparse
 import sys
 import threading
 import time
+from pathlib import Path
 
 from inference.generate import generate, load_model, parse_stop_sequences
 from tokenizer.tokenizer import BPETokenizer
@@ -10,8 +11,8 @@ from utils.helpers import get_device, set_seed
 
 def main():
     parser = argparse.ArgumentParser(description="Genera testo da un checkpoint mini_llm.")
-    parser.add_argument("--checkpoint", default="checkpoints/final.pt")
-    parser.add_argument("--quantized_checkpoint", default=None)
+    parser.add_argument("--checkpoint", default="models/checkpoints/mini_llm_32m_best.pt")
+    parser.add_argument("--quantized_checkpoint", default="models/quantized/mini_llm_32m_4bit.pt")
     parser.add_argument("--mode", choices=["debug", "standard", "production"], default="standard")
     parser.add_argument("--tokenizer", default="tokenizer/tokenizer.json")
     parser.add_argument("--prompt", default="python is")
@@ -32,6 +33,8 @@ def main():
     args = parser.parse_args()
 
     set_seed(args.seed)
+    if args.quantized and args.quantized_checkpoint and Path(args.quantized_checkpoint).exists() and args.checkpoint == "models/checkpoints/mini_llm_32m_best.pt":
+        args.checkpoint = args.quantized_checkpoint
     device = get_device()
     tokenizer = BPETokenizer.load_model(args.tokenizer)
     try:
@@ -45,7 +48,7 @@ def main():
         else:
             raise
     stop_sequences = parse_stop_sequences(tokenizer, args.stop)
-    model_type = "quantizzato 8-bit" if args.quantized else "normale"
+    model_type = "quantizzato" if args.quantized else "normale"
 
     if args.mode != "production":
         print(f"checkpoint: {args.checkpoint}")

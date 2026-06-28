@@ -1,3 +1,6 @@
 torch
 fastapi
 uvicorn
+requests
+# Optional for NF4-style 4-bit workflows when supported by your platform:
+# bitsandbytes

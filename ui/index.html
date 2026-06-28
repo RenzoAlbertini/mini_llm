@@ -25,10 +25,9 @@
             <label>
               Model
               <select id="model">
-                <option value="fp32">FP32</option>
-                <option value="fp16">FP16</option>
-                <option value="bf16">BF16</option>
-                <option value="8bit">8-bit</option>
+                <option value="32m">32M</option>
+                <option value="32m-4bit">32M-4bit</option>
+                <option value="finetuned">Finetuned</option>
                 <option value="demo">Demo</option>
               </select>
             </label>
@@ -54,6 +53,27 @@
               Max new tokens
               <input id="maxNewTokens" type="number" min="1" max="1024" value="120" />
             </label>
+          </div>
+
+          <div class="optionPanels">
+            <section>
+              <h2>Conversational Mode</h2>
+              <label class="inline">
+                <input id="conversationalMode" type="checkbox" checked />
+                Chat prompt format
+              </label>
+            </section>
+            <section>
+              <h2>RTX 3050 Optimizations</h2>
+              <label class="inline">
+                <input id="dynamicContext" type="checkbox" checked />
+                Dynamic context window
+              </label>
+              <label>
+                Max context
+                <input id="maxContext" type="number" min="64" max="512" value="512" step="64" />
+              </label>
+            </section>
           </div>
 
           <div class="actions">

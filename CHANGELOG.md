@@ -1,31 +1,25 @@
 # Changelog
 
-## [1.0.0] - 2026-06-27
+## [1.0.0] - 2026-06-28
 
 ### Added
 
-- UI Web with streaming token generation.
-- API server.
-- Professional CLI.
-- Full training pipeline.
-- 8-bit quantization utilities.
-- End-to-end pipeline runner.
-- Plugin system-ready structure.
-- Local agents-ready structure.
-- Metrics dashboard.
-- Export tooling.
-- Stress test tooling.
-- GPU profiling hooks.
+- MiniLLM-32M transformer preset for local experiments.
+- Professional dataset builder with Wikipedia, Gutenberg, OpenAssistant-style dialogue, SQuAD-style QA, instruction tuning, natural responses, and technical text.
+- Byte-level BPE tokenizer export with `tokenizer.json`, `vocab.json`, and `merges.txt`.
+- Safe laptop training profile with FP16, gradient checkpointing, checkpoint resume, and temperature-only cooldown.
+- Local training dashboard with loss, GPU metrics, VRAM, logs, checkpoints, benchmark plots, and training controls.
+- Benchmark Suite for checkpoint evaluation with perplexity, log-likelihood, token accuracy, coherence, and repetition metrics.
+- Chat Mode with FastAPI, streaming responses, checkpoint selection, history, and a professional local guardrail layer.
+- 4-bit quantization helpers and generation UI.
 
-### Fixed
+### Changed
 
-- Module structure and imports.
-- Checkpoint handling and resume flow.
-- Training and inference script organization.
+- Training now prefers the generated dataset in `data/raw/dataset_large.txt` and processed outputs in `data/processed/`.
+- GPU utilization-based throttling was removed; only temperature cooldown remains.
+- Packaging now includes `chat` and `benchmark` modules.
 
-### Improved
+### Notes
 
-- Inference stability.
-- Training logging.
-- Training plots.
-- Web UI fallback behavior.
+- The project is designed to run locally on consumer hardware.
+- Large generated artifacts and checkpoints are excluded from Git by default.

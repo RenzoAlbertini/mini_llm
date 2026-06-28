@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 setup(
     name="mini_llm",
     version="1.0.0",
-    description="Mini-LLM — Lightweight Local Language Model",
+    description="MiniLLM - Lightweight Local Language Model",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     py_modules=["mini_llm"],
@@ -12,6 +12,10 @@ setup(
         include=[
             "agents",
             "agents.*",
+            "benchmark",
+            "benchmark.*",
+            "chat",
+            "chat.*",
             "inference",
             "inference.*",
             "model",
@@ -28,12 +32,8 @@ setup(
             "utils.*",
         ]
     ),
-    install_requires=["torch", "fastapi", "uvicorn"],
+    install_requires=["torch", "fastapi", "uvicorn", "requests"],
     python_requires=">=3.10",
     license="MIT",
-    entry_points={
-        "console_scripts": [
-            "mini-llm=cli:main",
-        ]
-    },
+    entry_points={"console_scripts": ["mini-llm=cli:main"]},
 )

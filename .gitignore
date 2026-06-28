@@ -11,8 +11,13 @@ data/processed/
 data/benchmarks/
 data/eval/
 data/pipeline/
+data/raw/dataset_large.txt
+data/raw/dataset_large_test.txt
+data/raw/dialogue/
+data/raw/downloads/
 
 models/checkpoints/
+models/quantized/
 export/*
 !export/.gitkeep
 
@@ -20,6 +25,7 @@ export/*
 venv/
 .venv/
 .env
+.vscode/
 .agents/
 .pytest_cache/
 build/

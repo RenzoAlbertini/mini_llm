@@ -1,52 +1,27 @@
-# Mini-LLM — Lightweight Local Language Model
+# MiniLLM — Lightweight Local Language Model
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
-Mini-LLM is a compact, educational local language-model framework built with PyTorch. It includes a byte-level BPE tokenizer, a small decoder-only Transformer, full training and inference scripts, a web UI with token streaming, API endpoints, benchmarking, stress testing, quantization utilities, export tools, and a simple plugin/agent-ready project layout.
+MiniLLM is an educational local language-model project built with PyTorch. It includes a byte-level BPE tokenizer, a decoder-only MiniLLM-32M transformer, local training, checkpoint resume, benchmark evaluation, a monitoring dashboard, Chat Mode, and export utilities.
 
-The goal is not to compete with production LLM stacks. The goal is to make every moving piece understandable, hackable, and runnable on a local machine.
+The project is designed to run locally on consumer hardware and to stay readable enough for learning, experimentation, and iteration.
 
 ## Screenshot
 
-![Mini-LLM Web UI](/ui/screenshot.png)
+![MiniLLM Web UI](ui/screenshot.png)
 
 ## Features
 
-- Full training loop with FP32, FP16, and BF16 support where available
-- 8-bit linear weight quantization utilities
-- Web UI with streaming token generation
-- FastAPI server and WebSocket streaming endpoint
-- Professional CLI wrapper
-- End-to-end pipeline runner
-- Plugin system-ready project structure
-- Local agents-ready project structure
-- Metrics dashboard for token/sec, RAM, and VRAM
-- Stress test runner
-- GPU profiling hooks
-- Export to a minimal `safetensors` layout
-- Fine-tuning on custom datasets
-- Checkpoint manager with best/last/final checkpoints
-- Warmup + cosine learning-rate scheduler
-- Early stopping and resume support
-
-## Project Structure
-
-```text
-mini_llm/
-  model/              Transformer model and config
-  tokenizer/          Byte-level BPE tokenizer
-  training/           Dataset, training loop, stats
-  inference/          Text generation
-  utils/              Helpers, quantization, plotting
-  ui/                 Web UI assets
-  plugins/            Plugin extension point
-  agents/             Local agent extension point
-  data/               Raw data, logs, plots, reports
-  tests/              Unit and end-to-end tests
-  export/             Export output folder
-```
+- MiniLLM-32M transformer preset.
+- Byte-level BPE tokenizer with `tokenizer.json`, `vocab.json`, and `merges.txt`.
+- Dataset builder for natural text, QA, dialogue, instruction tuning, natural responses, and technical text.
+- FP16 training, gradient checkpointing, checkpoint resume, and temperature-only GPU cooldown.
+- Local dashboard with loss charts, GPU temperature, GPU utilization, VRAM, logs, checkpoints, and benchmark plots.
+- Benchmark Suite for perplexity, log-likelihood, token accuracy, coherence, and repetition metrics.
+- Chat Mode with FastAPI, streaming responses, checkpoint selection, history, and professional guardrails.
+- Quantization and export helpers.
 
 ## Installation
 
@@ -56,201 +31,177 @@ cd mini_llm
 python -m pip install -r requirements.txt
 ```
 
-Editable install:
+## Dataset
+
+Build the local training dataset:
 
 ```bash
-python -m pip install -e .
+python data/raw/build_dataset.py --force
 ```
 
-## Quickstart
-
-Run the full local verification:
-
-```bash
-python verify_project_structure.py
-python run_all_tests.py
-python sanity_check.py
-```
-
-Run the end-to-end demo pipeline:
-
-```bash
-python pipeline.py
-```
-
-## Web UI
-
-Start the web UI:
-
-```bash
-python ui_server.py --checkpoint models/checkpoints/final.pt --tokenizer tokenizer/tokenizer.json
-```
-
-Open:
+Expected outputs:
 
 ```text
-http://127.0.0.1:8000/ui
+data/raw/wikipedia.json
+data/raw/gutenberg.json
+data/raw/openassistant.json
+data/raw/squad.json
+data/raw/natural_dialogs.json
+data/raw/instructions.json
+data/raw/natural_responses.json
+data/processed/dataset.jsonl
+data/processed/train.txt
+data/processed/val.txt
 ```
 
-The UI supports:
+The generated dataset includes dialogue, QA, natural text, instruction examples, natural responses, and technical text. `data/raw/dataset_large.txt` is also generated for compatibility with the existing training pipeline.
 
-- prompt input
-- streaming token output over WebSocket
-- temperature, top-k, top-p, and max token controls
-- FP32 / FP16 / BF16 / 8-bit / demo model selector
-- metrics panel
-- agents panel
-- plugins panel
+## Tokenizer
+
+```bash
+python tokenizer/build_tokenizer.py \
+  --dataset data/processed/train.txt \
+  --out tokenizer/tokenizer.json \
+  --vocab_size 8192
+```
+
+The tokenizer is byte-level, so it supports Italian characters, punctuation, code snippets, and arbitrary UTF-8 text.
 
 ## Training
 
-Prepare a dataset:
+Laptop-safe MiniLLM-32M training profile:
 
 ```bash
-python data/raw/prepare_dataset.py --out data/raw/dataset.txt
+python run_training.py \
+  --model_size mini_llm_32m \
+  --seq_len 256 \
+  --batch_size 1 \
+  --epochs 8 \
+  --gradient_checkpointing \
+  --fp16 \
+  --gpu_memory_fraction 0.70 \
+  --gpu_max_temp 80 \
+  --thermal_cooldown_seconds 10 \
+  --eval_every 200 \
+  --eval_batches 5 \
+  --checkpoint_dir models/checkpoints
 ```
 
-Build the tokenizer:
-
-```bash
-python -m tokenizer.build_tokenizer --data_dir data/raw --out tokenizer/tokenizer.json --vocab_size 512
-```
-
-Run real training:
-
-```bash
-python run_training.py --epochs 3 --batch_size 8 --lr 3e-4 --seq_len 128
-```
-
-Outputs:
+Training saves:
 
 ```text
 models/checkpoints/best.pt
 models/checkpoints/last.pt
 models/checkpoints/final.pt
 data/logs/training.log
-data/plots/train_loss.png
-data/plots/val_loss.png
-data/plots/learning_rate.png
+data/logs/training_stats.csv
 ```
 
-## Inference
-
-Generate from the trained model:
+## Dashboard
 
 ```bash
-python run_generate.py --checkpoint models/checkpoints/final.pt --prompt "python is"
+python dashboard.py --port 8010
 ```
 
-Stream output:
-
-```bash
-python run_generate.py --checkpoint models/checkpoints/final.pt --prompt "python is" --stream
-```
-
-Guided generation:
-
-```bash
-python run_generate.py \
-  --checkpoint models/checkpoints/final.pt \
-  --prompt "python is" \
-  --required_word tensor \
-  --repetition_penalty 1.2 \
-  --num_samples 3
-```
-
-## API Server
-
-Start the local API:
-
-```bash
-python api_server.py --checkpoint models/checkpoints/final.pt --tokenizer tokenizer/tokenizer.json
-```
-
-Endpoints:
-
-- `GET /health`
-- `GET /info`
-- `POST /generate`
-- `POST /evaluate`
-
-## CLI
-
-The CLI forwards commands to the dedicated scripts:
-
-```bash
-python cli.py train -- --epochs 3 --batch_size 8
-python cli.py generate -- --checkpoint models/checkpoints/final.pt --prompt "python is"
-python cli.py evaluate -- --checkpoint models/checkpoints/final.pt
-python cli.py benchmark -- --checkpoint models/checkpoints/final.pt
-python cli.py export -- --checkpoint models/checkpoints/final.pt
-python cli.py ui -- --checkpoint models/checkpoints/final.pt
-```
-
-## Benchmark
-
-```bash
-python benchmark_inference.py --checkpoint models/checkpoints/final.pt --max_new_tokens 50
-```
-
-Benchmark reports are saved to:
+Open:
 
 ```text
-data/benchmarks/
+http://127.0.0.1:8010
 ```
 
-## Export
+The dashboard reads logs, stats, checkpoint files, GPU metrics, benchmark results, and Chat Mode status.
 
-Export model, tokenizer, config, manifest, and safetensors:
+## Chat Mode
 
 ```bash
-python export_model.py --checkpoint models/checkpoints/final.pt --tokenizer tokenizer/tokenizer.json --out_dir export
+python chat/server.py --checkpoint models/checkpoints/best.pt --port 8020
 ```
 
-## Fine-Tuning
-
-```bash
-python finetune.py \
-  --base_checkpoint models/checkpoints/final.pt \
-  --data_dir data/raw \
-  --checkpoint_dir models/checkpoints/finetune
-```
-
-## Stress Test
-
-```bash
-python stress_test.py --checkpoint models/checkpoints/final.pt --prompts 100
-```
-
-## GPU Profiling
-
-```bash
-python profile_gpu.py --checkpoint models/checkpoints/final.pt
-```
-
-Reports are written to:
+Open:
 
 ```text
-data/profiling/
+http://127.0.0.1:8020/chat
 ```
 
-## Plugin System
+API:
 
-The `plugins/` folder is reserved for local extensions. The web UI can discover plugins placed there.
+```http
+POST /api/chat
+GET /api/chat/checkpoints
+```
 
-## Local Agents
+Example:
 
-The `agents/` folder is reserved for local agent definitions. The web UI can discover agents placed there.
+```bash
+curl -X POST http://127.0.0.1:8020/api/chat \
+  -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Ciao, come ti chiami?\",\"temperature\":0.45,\"top_p\":0.82,\"max_tokens\":80,\"history\":[]}"
+```
+
+Chat Mode uses a local professional guardrail layer for simple questions, explanations, current-info limitations, writing tasks, and quality filtering before showing generated checkpoint output.
+
+## Benchmark Suite
+
+```bash
+python evaluate.py --checkpoint models/checkpoints/best.pt
+```
+
+Benchmark results are saved in:
+
+```text
+data/benchmarks/results_<checkpoint>.json
+```
+
+Dashboard endpoint:
+
+```http
+POST /api/evaluate
+Content-Type: application/json
+
+{"checkpoint_path":"models/checkpoints/best.pt"}
+```
+
+Metrics:
+
+- Perplexity: lower is better.
+- Average log-likelihood: higher is better.
+- Token accuracy: next-token exact match when expected answers are available.
+- Coherence score: local heuristic for response readability.
+- Repetition score: higher means less repetitive output.
+
+## Project Structure
+
+```text
+model/          transformer and configs
+tokenizer/      byte-level BPE tokenizer
+training/       dataloaders, trainer, stats, controls
+data/           raw and processed dataset tooling
+chat/           local Chat Mode server and UI
+benchmark/      benchmark dataset and evaluator
+ui/             generation UI assets
+utils/          quantization, plotting, helpers
+tests/          unit and integration tests
+export/         export artifacts
+agents/         optional agent modules
+plugins/        optional plugin modules
+```
+
+## Release
+
+Current release target: `v1.0.0`.
+
+```bash
+git tag v1.0.0
+```
 
 ## Roadmap
 
-- Add richer tokenizer training options
-- Add dataset streaming for larger corpora
-- Add ONNX export
-- Add richer plugin contracts
-- Add agent configuration examples
-- Add optional experiment tracking
-- Add model cards for exported checkpoints
+- Larger instruction-tuning dataset.
+- LoRA adapters for cheaper fine-tuning.
+- Streaming dataset training for corpora larger than RAM.
+- More benchmark categories and regression gates.
+- ONNX or TorchScript export.
+- Model card and dataset card.
 
 ## License
 

@@ -8,6 +8,9 @@ const els = {
   topP: document.querySelector("#topP"),
   topPValue: document.querySelector("#topPValue"),
   maxNewTokens: document.querySelector("#maxNewTokens"),
+  conversationalMode: document.querySelector("#conversationalMode"),
+  dynamicContext: document.querySelector("#dynamicContext"),
+  maxContext: document.querySelector("#maxContext"),
   generate: document.querySelector("#generate"),
   clear: document.querySelector("#clear"),
   output: document.querySelector("#output"),
@@ -20,19 +23,26 @@ const els = {
 };
 
 let socket = null;
+let streamBuffer = "";
+let rafPending = false;
 
 function setStatus(text) {
   els.status.textContent = text;
 }
 
 function payload() {
+  const prompt = els.conversationalMode.checked && !els.prompt.value.includes("User:")
+    ? `User: ${els.prompt.value}\nAssistant:`
+    : els.prompt.value;
   return {
-    prompt: els.prompt.value,
+    prompt,
     model: els.model.value,
     temperature: Number(els.temperature.value),
     top_k: Number(els.topK.value),
     top_p: Number(els.topP.value),
     max_new_tokens: Number(els.maxNewTokens.value),
+    dynamic_context: els.dynamicContext.checked,
+    max_context: Number(els.maxContext.value),
   };
 }
 
@@ -46,6 +56,7 @@ function generate() {
     socket.close();
   }
   els.output.textContent = "";
+  streamBuffer = "";
   setStatus("Connecting");
   socket = new WebSocket(wsUrl());
 
@@ -57,11 +68,13 @@ function generate() {
   socket.addEventListener("message", (event) => {
     const data = JSON.parse(event.data);
     if (data.type === "token") {
-      els.output.textContent += data.text;
-      els.output.scrollTop = els.output.scrollHeight;
+      appendToken(data.text);
     } else if (data.type === "status") {
       setStatus(data.message);
+    } else if (data.type === "metrics") {
+      renderMetrics(data.metrics);
     } else if (data.type === "done") {
+      flushStreamBuffer();
       setStatus("Done");
       els.speed.textContent = `${data.tokens_per_second.toFixed(2)} tok/s`;
       refreshMetrics();
@@ -76,6 +89,23 @@ function generate() {
     setStatus("WebSocket error, using HTTP fallback");
     fallbackGenerate();
   });
+}
+
+function appendToken(text) {
+  streamBuffer += text;
+  if (rafPending) return;
+  rafPending = true;
+  requestAnimationFrame(() => {
+    flushStreamBuffer();
+    rafPending = false;
+  });
+}
+
+function flushStreamBuffer() {
+  if (!streamBuffer) return;
+  els.output.textContent += streamBuffer;
+  streamBuffer = "";
+  els.output.scrollTop = els.output.scrollHeight;
 }
 
 async function fallbackGenerate() {
@@ -111,12 +141,18 @@ function bytes(value) {
 async function refreshMetrics() {
   const res = await fetch("/metrics");
   const data = await res.json();
+  renderMetrics(data);
+}
+
+function renderMetrics(data) {
   els.metrics.innerHTML = "";
   const rows = [
     ["Tokens/sec", data.tokens_per_second?.toFixed?.(2) || "0"],
     ["Latency", `${(data.latency_ms || 0).toFixed(2)} ms/token`],
     ["RAM free", bytes(data.ram?.free)],
     ["RAM used", data.ram?.used_percent !== null ? `${data.ram.used_percent}%` : "n/a"],
+    ["VRAM free", bytes(data.vram?.free)],
+    ["VRAM used", data.vram?.used_percent !== null ? `${data.vram.used_percent}%` : "n/a"],
     ["VRAM allocated", bytes(data.vram?.allocated)],
     ["Last error", data.last_error || "none"],
   ];

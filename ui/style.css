@@ -110,6 +110,31 @@ textarea {
   margin-top: 14px;
 }
 
+.optionPanels {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.optionPanels section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.inline {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.inline input {
+  width: auto;
+}
+
 .actions {
   display: flex;
   gap: 10px;

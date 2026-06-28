@@ -109,8 +109,6 @@ def memory_usage(device=None):
 def get_amp_dtype():
     if not torch.cuda.is_available():
         return None
-    if hasattr(torch.cuda, "is_bf16_supported") and torch.cuda.is_bf16_supported():
-        return torch.bfloat16
     return torch.float16
 
 
