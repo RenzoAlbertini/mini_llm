@@ -1,6 +1,6 @@
 # MiniLLM - Lightweight Local Language Model
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Python](benchmark/Screenshot 2026-06-28 175559.png)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
