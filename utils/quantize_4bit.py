@@ -113,8 +113,7 @@ def main():
     model.load_state_dict(checkpoint["model"])
     model.eval()
     out_path = save_4bit_model(model, args.out, config=config)
-    backend = "bitsandbytes presente" if bitsandbytes_available() else "fallback int4 portabile"
-    print(f"checkpoint 4-bit salvato: {out_path} ({backend})")
+    print(f"checkpoint 4-bit salvato: {out_path} (portable symmetric int4)")
 
 
 if __name__ == "__main__":

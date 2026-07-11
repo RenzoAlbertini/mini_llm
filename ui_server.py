@@ -248,11 +248,11 @@ def create_app(runtime):
 
     @app.get("/agents")
     def agents():
-        return {"agents": discover_optional_items([".agents", ".codex/agents"])}
+        return {"agents": discover_optional_items(["agents", ".agents"])}
 
     @app.get("/plugins")
     def plugins():
-        return {"plugins": discover_optional_items([".codex/plugins", ".agents/plugins"])}
+        return {"plugins": discover_optional_items(["plugins", ".agents/plugins"])}
 
     @app.post("/generate")
     async def generate_endpoint(payload: dict):
