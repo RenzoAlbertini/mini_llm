@@ -1,4 +1,6 @@
 from array import array
+import hashlib
+import json
 from pathlib import Path
 
 import torch
@@ -51,8 +53,31 @@ def load_raw_text(data_dir, sources=None):
 
 def load_or_tokenize(data_dir, tokenizer_path, processed_path, add_eos=True, sources=None, max_chars=0):
     processed_path = Path(processed_path)
+    source_paths = []
+    if sources:
+        for path, _ in parse_weighted_sources(sources):
+            source_paths.extend(iter_text_files(path))
+    else:
+        source_paths.extend(iter_text_files(data_dir))
+    fingerprint_data = {
+        "version": 2,
+        "tokenizer_sha256": hashlib.sha256(Path(tokenizer_path).read_bytes()).hexdigest(),
+        "sources": [
+            [str(path.resolve()), path.stat().st_size, path.stat().st_mtime_ns]
+            for path in source_paths
+        ],
+        "weighted_sources": list(sources or []),
+        "add_eos": bool(add_eos),
+        "max_chars": int(max_chars),
+    }
+    fingerprint = hashlib.sha256(
+        json.dumps(fingerprint_data, sort_keys=True).encode("utf-8")
+    ).hexdigest()
     if processed_path.exists():
-        return torch.load(processed_path)
+        cached = torch.load(processed_path, map_location="cpu")
+        if isinstance(cached, dict) and cached.get("fingerprint") == fingerprint:
+            return cached["tokens"]
+        print("cache token non valida: dataset o tokenizer modificato, rigenero", flush=True)
 
     tokenizer = BPETokenizer.load_model(tokenizer_path)
     text = load_raw_text(data_dir, sources=sources)
@@ -62,7 +87,7 @@ def load_or_tokenize(data_dir, tokenizer_path, processed_path, add_eos=True, sou
     ids = tokenizer.encode(text, add_eos=add_eos)
     tokens = torch.tensor(ids, dtype=torch.long)
     processed_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(tokens, processed_path)
+    torch.save({"tokens": tokens, "fingerprint": fingerprint}, processed_path)
     return tokens
 
 
@@ -176,8 +201,27 @@ def split_dataset(dataset, val_fraction=0.05, seed=42):
 
 
 def create_dataloaders(tokens, seq_len, batch_size, val_fraction=0.05, stride=1, seed=42, num_workers=0):
-    dataset = TokenDataset(tokens, seq_len=seq_len, stride=stride)
-    train_ds, val_ds = split_dataset(dataset, val_fraction=val_fraction, seed=seed)
+    """Crea split contigui prima delle finestre per evitare data leakage.
+
+    Con stride piccolo, finestre adiacenti condividono quasi tutti i token. Uno
+    split casuale delle finestre renderebbe quindi la validation artificialmente
+    facile. La fascia di ``seq_len`` token tra gli split impedisce sovrapposizioni.
+    """
+    if not 0.0 < val_fraction < 1.0:
+        raise ValueError("val_fraction deve essere compresa tra 0 e 1")
+    min_tokens = 2 * (seq_len + 1) + seq_len
+    if len(tokens) < min_tokens:
+        raise ValueError(
+            f"Servono almeno {min_tokens} token per split train/validation indipendenti; "
+            f"trovati {len(tokens)}. Riduci seq_len o usa piu dati."
+        )
+
+    split_at = int(len(tokens) * (1.0 - val_fraction))
+    split_at = min(split_at, len(tokens) - seq_len - 1)
+    train_tokens = tokens[:split_at]
+    val_tokens = tokens[split_at + seq_len:]
+    train_ds = TokenDataset(train_tokens, seq_len=seq_len, stride=stride)
+    val_ds = TokenDataset(val_tokens, seq_len=seq_len, stride=stride)
 
     drop_last = len(train_ds) >= batch_size
     train_loader = DataLoader(

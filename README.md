@@ -12,14 +12,31 @@ It is designed for learning, experimentation, and laptop-friendly training on co
 
 ## Features
 
-- MiniLLM-32M decoder-only transformer.
+- MiniLLM-36M decoder-only transformer (the legacy CLI preset is named `mini_llm_32m`).
 - Byte-level BPE tokenizer with Italian, punctuation, UTF-8, and code support.
-- Dataset builder for natural text, QA, dialogue, instruction tuning, technical text, and clean natural responses.
+- Dataset builder for natural text and small synthetic QA, dialogue, instruction-tuning, and technical examples.
 - Laptop-safe training profile with FP16, gradient checkpointing, checkpoint resume, and temperature cooldown.
 - Local FastAPI dashboard with loss charts, GPU temperature, utilization, VRAM, logs, checkpoints, and benchmark plots.
 - Benchmark Suite with perplexity, average log-likelihood, token accuracy, coherence, and repetition metrics.
 - Chat Mode with streaming responses, checkpoint selector, history, and professional fallback guardrails.
-- Export and quantization helpers for experimentation.
+- Export and checkpoint-compression helpers using portable int8/int4 quantization experiments.
+
+## Scope and limitations
+
+MiniLLM is a from-scratch educational model, not an attempt to compete with
+pretrained production LLMs. The default corpus is deliberately small and contains
+synthetic, template-generated examples inspired by QA and assistant datasets; it
+does not bundle the official Wikipedia, Gutenberg, SQuAD, or OpenAssistant
+datasets. The project is intended to demonstrate the complete language-model
+pipeline on consumer hardware.
+
+Training and validation are split on the token stream before sliding windows are
+created, with a context-length gap between them. This avoids the severe leakage
+that occurs when overlapping windows are randomly divided after tokenization.
+
+The int8/int4 utilities compress checkpoints, then dequantize weights when loading
+the standard PyTorch model. They reduce file size but do not provide true int8/NF4
+inference kernels or guaranteed speed/VRAM improvements.
 
 ## Quick Start
 

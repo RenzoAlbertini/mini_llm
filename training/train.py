@@ -41,7 +41,9 @@ def evaluate(model, loader, device, max_batches=20, amp_dtype=None):
             _, loss = model(x, y)
         losses.append(loss.item())
     model.train()
-    return sum(losses) / max(1, len(losses))
+    if not losses:
+        raise ValueError("Validation loader vuoto: controlla dataset, seq_len e val_fraction")
+    return sum(losses) / len(losses)
 
 
 def build_arg_parser():
@@ -317,7 +319,7 @@ def train_model(args, config=None):
                             chunks += 1
                             with autocast(enabled=True, dtype=amp_dtype) if use_amp else nullcontext():
                                 _, chunk_loss = model(xb, yb)
-                                scaled_loss = chunk_loss / max(1, (x.size(0) + micro_batch_size - 1) // micro_batch_size)
+                                scaled_loss = chunk_loss * (xb.size(0) / x.size(0))
                             scaler.scale(scaled_loss).backward()
                             total_loss += chunk_loss.detach().item() * (xb.size(0) / x.size(0))
                         scaler.unscale_(optimizer)

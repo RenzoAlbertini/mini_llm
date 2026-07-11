@@ -64,7 +64,9 @@ def bitsandbytes_available():
 def save_4bit_model(model, out_path, config=None):
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    backend = "bitsandbytes-nf4-compatible" if bitsandbytes_available() else "portable-int4"
+    # Questa e quantizzazione simmetrica portabile, non NF4. La presenza di
+    # bitsandbytes non cambia il formato finche non usiamo i suoi kernel.
+    backend = "portable-symmetric-int4"
     q_state = {}
     for name, tensor in model.state_dict().items():
         if tensor.is_floating_point():
