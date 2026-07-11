@@ -4,7 +4,7 @@
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
-MiniLLM is a compact local language-model project built with PyTorch: dataset builder, byte-level tokenizer, MiniLLM-32M training, dashboard, benchmark suite, and a local Chat Mode.
+MiniLLM is a compact local language-model project built with PyTorch: dataset builder, byte-level tokenizer, MiniLLM-36M training, dashboard, benchmark suite, and a local Chat Mode.
 
 It is designed for learning, experimentation, and laptop-friendly training on consumer GPUs.
 
