@@ -5,6 +5,7 @@ import unittest
 
 TEST_MODULES = [
     ("tokenizer", "tests.test_tokenizer"),
+    ("dataset", "tests.test_dataset"),
     ("model_forward", "tests.test_model_forward"),
     ("generate", "tests.test_generate"),
     ("end_to_end", "tests.test_end_to_end"),
