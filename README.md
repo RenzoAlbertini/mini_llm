@@ -172,7 +172,7 @@ python dashboard.py --port 8010
 Open `http://127.0.0.1:8010`. The dashboard displays training loss, GPU
 temperature and utilization, VRAM, checkpoints, controls, and benchmark output.
 
-![MiniLLM training dashboard](benchmark/Screenshot.png)
+![MiniLLM training dashboard](benchmark/Screensht.png)
 
 ## Evaluation
 
