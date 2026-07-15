@@ -84,7 +84,7 @@ def save_4bit_model(model, out_path, config=None):
 
 
 def load_4bit_state_dict(path, dtype=torch.float32, device="cpu"):
-    payload = torch.load(path, map_location="cpu")
+    payload = torch.load(path, map_location="cpu", weights_only=True)
     state_dict = {}
     for name, entry in payload["model"].items():
         if "raw" in entry:

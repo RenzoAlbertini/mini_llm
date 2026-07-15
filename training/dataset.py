@@ -74,7 +74,7 @@ def load_or_tokenize(data_dir, tokenizer_path, processed_path, add_eos=True, sou
         json.dumps(fingerprint_data, sort_keys=True).encode("utf-8")
     ).hexdigest()
     if processed_path.exists():
-        cached = torch.load(processed_path, map_location="cpu")
+        cached = torch.load(processed_path, map_location="cpu", weights_only=True)
         if isinstance(cached, dict) and cached.get("fingerprint") == fingerprint:
             return cached["tokens"]
         print("cache token non valida: dataset o tokenizer modificato, rigenero", flush=True)
@@ -216,10 +216,18 @@ def create_dataloaders(tokens, seq_len, batch_size, val_fraction=0.05, stride=1,
             f"trovati {len(tokens)}. Riduci seq_len o usa piu dati."
         )
 
-    split_at = int(len(tokens) * (1.0 - val_fraction))
-    split_at = min(split_at, len(tokens) - seq_len - 1)
+    # Each side must contain at least one complete input/target window. A plain
+    # percentage split fails on small smoke datasets because the anti-leakage
+    # gap can consume the entire validation region.
+    val_token_count = max(seq_len + 1, int(len(tokens) * val_fraction))
+    split_at = len(tokens) - seq_len - val_token_count
+    if split_at <= seq_len:
+        raise ValueError(
+            "Dataset insufficiente per creare train, gap anti-leakage e validation: "
+            f"tokens={len(tokens)}, seq_len={seq_len}, val_fraction={val_fraction}"
+        )
     train_tokens = tokens[:split_at]
-    val_tokens = tokens[split_at + seq_len:]
+    val_tokens = tokens[split_at + seq_len :]
     train_ds = TokenDataset(train_tokens, seq_len=seq_len, stride=stride)
     val_ds = TokenDataset(val_tokens, seq_len=seq_len, stride=stride)
 

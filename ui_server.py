@@ -2,13 +2,15 @@ import argparse
 import asyncio
 import json
 import os
-import random
 import time
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+
+
+UI_DIR = Path(__file__).resolve().parent / "ui"
 
 
 class UIRuntime:
@@ -158,8 +160,9 @@ def demo_tokens(prompt, max_new_tokens):
 
 async def stream_real(runtime, websocket, payload):
     model_type = payload.get("model", "32m")
-    model = runtime.load(model_type)
-    if model is None and runtime.quantized_checkpoint and Path(runtime.quantized_checkpoint).exists():
+    explicit_demo = model_type == "demo"
+    model = None if explicit_demo else runtime.load(model_type)
+    if not explicit_demo and model is None and runtime.quantized_checkpoint and Path(runtime.quantized_checkpoint).exists():
         await websocket.send_json({"type": "status", "message": "fallback to 4-bit model"})
         model_type = "32m-4bit"
         model = runtime.load("32m-4bit")
@@ -169,12 +172,20 @@ async def stream_real(runtime, websocket, payload):
     start = time.perf_counter()
     count = 0
 
-    if model is None:
-        await websocket.send_json({"type": "status", "message": "demo fallback active"})
+    if explicit_demo:
+        await websocket.send_json({"type": "status", "message": "explicit demo mode (no model)"})
         for token in demo_tokens(prompt, max_new_tokens):
             await websocket.send_json({"type": "token", "text": token})
             count += 1
             await asyncio.sleep(0.035)
+    elif model is None:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": runtime.last_error or "checkpoint unavailable; train or select an existing checkpoint",
+            }
+        )
+        return
     else:
         import torch
 
@@ -185,23 +196,37 @@ async def stream_real(runtime, websocket, payload):
         temperature = float(payload.get("temperature", 0.8))
         top_k = int(payload.get("top_k", 50))
         top_p = float(payload.get("top_p", 0.95))
-        from inference.generate import top_k_filter, top_p_filter
+        do_sample = bool(payload.get("do_sample", False))
+        seed = int(payload.get("seed", 42))
+        from inference.generate import apply_repetition_penalty, top_k_filter, top_p_filter
         import torch.nn.functional as F
 
         dynamic_context = bool(payload.get("dynamic_context", True))
         max_context = int(payload.get("max_context", model.config.seq_len))
+
+        generated_ids = []
+        generator = None
+        if do_sample and runtime.device.type in {"cpu", "cuda"}:
+            generator = torch.Generator(device=runtime.device.type)
+            generator.manual_seed(seed)
 
         with torch.no_grad():
             for _ in range(max_new_tokens):
                 context_limit = min(model.config.seq_len, max_context) if dynamic_context else model.config.seq_len
                 x_cond = x[:, -context_limit:]
                 logits, _ = model(x_cond)
-                logits = logits[:, -1, :] / max(temperature, 1e-6)
-                logits = top_k_filter(logits, top_k)
-                logits = top_p_filter(logits, top_p)
-                probs = F.softmax(logits, dim=-1)
-                next_id = torch.multinomial(probs, num_samples=1)
+                logits = logits[:, -1, :]
+                logits = apply_repetition_penalty(logits, generated_ids, 1.08)
+                if do_sample:
+                    logits = logits / max(temperature, 1e-6)
+                    logits = top_k_filter(logits, top_k)
+                    logits = top_p_filter(logits, top_p)
+                    probs = F.softmax(logits, dim=-1)
+                    next_id = torch.multinomial(probs, num_samples=1, generator=generator)
+                else:
+                    next_id = torch.argmax(logits, dim=-1, keepdim=True)
                 x = torch.cat([x, next_id], dim=1)
+                generated_ids.append(int(next_id.item()))
                 token = runtime.tokenizer.decode([next_id.item()])
                 await websocket.send_json({"type": "token", "text": token})
                 count += 1
@@ -222,21 +247,23 @@ async def stream_real(runtime, websocket, payload):
             "tokens": count,
             "seconds": elapsed,
             "tokens_per_second": runtime.last_tokens_per_second,
+            "source": "demo" if explicit_demo else "model",
+            "model": model_type,
         }
     )
 
 
 def create_app(runtime):
     app = FastAPI(title="mini_llm UI")
-    app.mount("/static", StaticFiles(directory="ui"), name="static")
+    app.mount("/static", StaticFiles(directory=UI_DIR), name="static")
 
     @app.get("/ui")
     def ui():
-        return FileResponse("ui/index.html")
+        return FileResponse(UI_DIR / "index.html")
 
     @app.get("/")
     def root():
-        return FileResponse("ui/index.html")
+        return FileResponse(UI_DIR / "index.html")
 
     @app.get("/metrics")
     def metrics():
@@ -257,13 +284,18 @@ def create_app(runtime):
     @app.post("/generate")
     async def generate_endpoint(payload: dict):
         chunks = []
+        errors = []
 
         class Collector:
             async def send_json(self, item):
                 if item.get("type") == "token":
                     chunks.append(item["text"])
+                elif item.get("type") == "error":
+                    errors.append(item.get("message", "generation failed"))
 
         await stream_real(runtime, Collector(), payload)
+        if errors:
+            return JSONResponse({"error": errors[0]}, status_code=503)
         return {"text": "".join(chunks), "metrics": runtime.metrics()}
 
     @app.websocket("/stream")

@@ -1,129 +1,129 @@
 # MiniLLM — From-Scratch Local Language Model
 
-![Python](benchmark/Screenshot.png)
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c)
+![Tests](https://github.com/RenzoAlbertini/mini_llm/actions/workflows/tests.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
-MiniLLM is a compact decoder-only language model built from scratch with PyTorch. The repository covers the complete pipeline: dataset preparation, byte-level BPE tokenization, training, validation, checkpointing, evaluation, quantization experiments, and local inference.
+MiniLLM is a compact decoder-only Transformer implemented with PyTorch. It
+covers the complete educational pipeline: byte-level BPE tokenization,
+training, validation, checkpointing, deterministic or sampled inference,
+benchmarking, and a model-first local chat interface.
 
-The project is designed for learning and experimentation on consumer hardware. Its goal is to make the main components of a language model understandable and inspectable, rather than to compete with production pretrained LLMs.
+This is a learning and systems-engineering project, not a pretrained assistant.
+No trained checkpoint is committed to the repository. Output quality therefore
+depends on the corpus, training time, and checkpoint that you create locally.
 
-![MiniLLM Web UI](ui/screenshot.png)
+## What is implemented
 
-## Features
-
-- Approximately 36M-parameter decoder-only Transformer.
-- Byte-level BPE tokenizer with Italian, punctuation, UTF-8, and code support.
-- Dataset builder for natural text and small synthetic QA, dialogue, instruction-tuning, and technical examples.
-- Leakage-resistant train/validation split created before sliding token windows.
-- Token cache validation based on the tokenizer, source files, and preprocessing settings.
-- Laptop-safe training with mixed precision, gradient checkpointing, dynamic memory fallbacks, checkpoint resume, and temperature cooldown.
-- Local FastAPI dashboard with loss charts, GPU temperature, utilization, VRAM, logs, checkpoints, and benchmark plots.
-- Benchmark Suite with perplexity, average log-likelihood, token accuracy, coherence, and repetition metrics.
-- Chat Mode with streaming responses, checkpoint selector, history, and professional fallback guardrails.
-- Portable int8/int4 checkpoint-compression experiments.
-- Automated tests for tokenizer round-trips, causal masking, tied embeddings, dataset isolation, generation, and end-to-end execution.
-- GitHub Actions test workflow using PyTorch CPU.
+- A GPT-style, decoder-only Transformer with causal self-attention.
+- A byte-level BPE tokenizer that can represent arbitrary UTF-8 text.
+- Leakage-resistant contiguous train/validation splits.
+- Fingerprinted token caches that invalidate when data or tokenizer changes.
+- Checkpoint resume, early stopping, mixed precision, gradient checkpointing,
+  and GPU thermal controls.
+- Greedy deterministic decoding by default, with opt-in seeded sampling.
+- Sign-correct repetition penalty, top-k/top-p filtering, and stop sequences.
+- A Chat Mode that runs the selected checkpoint for every request.
+- Explicit response provenance: `model` or `quality_fallback_after_model`.
+- Benchmark, dashboard, API, export, and quantization experiments.
+- CPU-compatible automated tests in GitHub Actions.
 
 ## Architecture
 
-The model follows a small GPT-style design:
+The `mini_llm_32m` compatibility preset is approximately 36 million parameters:
 
-- learned token and positional embeddings;
-- pre-normalized Transformer blocks;
-- causal multi-head self-attention;
-- GELU feed-forward networks;
-- residual connections and dropout;
-- tied input embeddings and language-model output weights;
-- configurable context length and gradient checkpointing.
+| Setting | Value |
+|---|---:|
+| Vocabulary | 8,192 |
+| Context length | 512 |
+| Transformer layers | 12 |
+| Attention heads | 8 |
+| Hidden size | 512 |
+| Feed-forward size | 1,536 |
 
-The default preset uses a vocabulary of 8,192 tokens, 12 Transformer layers,
-8 attention heads, a hidden size of 512, and a feed-forward size of 1,536. This
-corresponds to approximately 36M parameters. The CLI identifier
-`mini_llm_32m` is retained for backward compatibility.
+The historical preset name is retained for CLI compatibility even though the
+actual parameter count is closer to 36M.
 
-## Data and validation
+## Quick Start — verified smoke test
 
-The included builder creates a compact educational corpus containing natural text
-and synthetic examples for QA, dialogue, instruction following, and technical
-language. Synthetic sources are intentionally described as dataset-inspired and
-are not presented as copies of the official Wikipedia, Gutenberg, SQuAD, or
-OpenAssistant datasets.
-
-The token stream is divided into contiguous training and validation regions before
-sliding windows are generated. A context-length gap separates the regions so that
-overlapping sequences cannot appear in both sets. This makes validation loss more
-representative than a random split performed after window creation.
-
-Processed tokens are cached together with a fingerprint derived from the tokenizer,
-source files, and preprocessing options. The cache is rebuilt automatically when
-any of these inputs changes.
-
-## Scope and limitations
-
-MiniLLM is a from-scratch educational model, not an attempt to compete with
-pretrained production LLMs. The default corpus is deliberately small and contains
-synthetic, template-generated examples inspired by QA and assistant datasets; it
-does not bundle the official Wikipedia, Gutenberg, SQuAD, or OpenAssistant
-datasets. The project is intended to demonstrate the complete language-model
-pipeline on consumer hardware.
-
-The int8/int4 utilities compress checkpoints, then dequantize weights when loading
-the standard PyTorch model. They reduce file size but do not provide true int8/NF4
-inference kernels or guaranteed speed/VRAM improvements.
-
-The default dataset and compute budget are intentionally modest. MiniLLM can learn
-local patterns and produce short domain-related sequences, but it is not expected
-to provide the knowledge, robustness, or generalization of a pretrained assistant.
-
-## Quick Start
+The Quick Start intentionally trains a tiny model for 20 steps. Its purpose is
+to verify the complete pipeline in a few minutes, not to produce an assistant-
+quality checkpoint.
 
 ```bash
 git clone https://github.com/RenzoAlbertini/mini_llm.git
 cd mini_llm
+python -m venv .venv
+```
+
+Activate the environment:
+
+```bash
+# Linux/macOS
+source .venv/bin/activate
+
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+```
+
+Install and run the smoke training:
+
+```bash
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+python run_training.py --demo --max_steps 20
 ```
 
-Build dataset and tokenizer:
+Generate a deterministic continuation from the resulting checkpoint:
 
 ```bash
-python data/raw/build_dataset.py --force
-python tokenizer/build_tokenizer.py --dataset data/processed/train.txt --out tokenizer/tokenizer.json --vocab_size 8192
+python run_generate.py \
+  --checkpoint models/checkpoints/demo/best.pt \
+  --tokenizer data/processed/demo_tokenizer.json \
+  --prompt "python is" \
+  --max_new_tokens 40
 ```
 
-Start laptop-safe training:
+On PowerShell, place the command on one line or replace `\` with the PowerShell
+continuation character.
+
+## Deterministic and sampled generation
+
+Generation is greedy and repeatable by default. This makes checkpoint
+comparisons meaningful and prevents the CLI from appearing random:
 
 ```bash
-python run_training.py --model_size mini_llm_32m --seq_len 256 --batch_size 1 --epochs 8 --gradient_checkpointing --fp16 --gpu_memory_fraction 0.70 --gpu_max_temp 80 --thermal_cooldown_seconds 10 --eval_every 200 --eval_batches 5 --checkpoint_dir models/checkpoints
+python run_generate.py --checkpoint PATH --tokenizer PATH --prompt "python is"
 ```
 
-Training writes:
-
-```text
-models/checkpoints/best.pt
-models/checkpoints/last.pt
-models/checkpoints/final.pt
-data/logs/training.log
-data/logs/training_stats.csv
-```
-
-## Dashboard
+Sampling is explicit and reproducible with a seed:
 
 ```bash
-python dashboard.py --port 8010
+python run_generate.py --checkpoint PATH --tokenizer PATH --prompt "python is" --sample --seed 42 --temperature 0.8 --top_p 0.9
 ```
 
-Open `http://127.0.0.1:8010`.
-
-The dashboard monitors training in real time and includes plots, GPU stats, checkpoint status, benchmark results, and training controls.
+The generator returns only newly generated text; it no longer repeats the
+prompt in the result.
 
 ## Chat Mode
 
+Start Chat Mode with the demo checkpoint:
+
 ```bash
-python chat/server.py --checkpoint models/checkpoints/best.pt --port 8020
+python chat/server.py \
+  --checkpoint models/checkpoints/demo/best.pt \
+  --tokenizer data/processed/demo_tokenizer.json \
+  --checkpoint_dir models/checkpoints \
+  --port 8020
 ```
 
 Open `http://127.0.0.1:8020/chat`.
+
+Every request first executes the selected model. If the generated text fails a
+basic coherence check, the API may return a conservative fallback and labels it
+`quality_fallback_after_model`; it never silently presents a template as model
+output. Missing or incompatible checkpoints produce a clear HTTP error.
 
 API endpoints:
 
@@ -132,82 +132,94 @@ POST /api/chat
 GET /api/chat/checkpoints
 ```
 
-Example:
+Example non-streaming request:
 
 ```bash
-curl -X POST http://127.0.0.1:8020/api/chat -H "Content-Type: application/json" -d "{\"prompt\":\"Ciao, come ti chiami?\",\"temperature\":0.45,\"top_p\":0.82,\"max_tokens\":80,\"history\":[]}"
+curl -X POST http://127.0.0.1:8020/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Spiega un tokenizer.","max_tokens":80,"do_sample":false,"history":[]}'
 ```
 
-## Benchmark
+## Training a meaningful experiment
+
+The bundled JSON data are deterministic synthetic fixtures for smoke testing;
+they are not copies of Wikipedia, Project Gutenberg, SQuAD, or OpenAssistant.
+See [`data/raw/README.md`](data/raw/README.md) for provenance.
+
+For a serious experiment, supply a larger, diverse corpus that you are licensed
+to use. The builder can still prepare the bundled fixtures without the old
+hard-coded 25 MB failure condition:
+
+```bash
+python data/raw/build_dataset.py
+python tokenizer/build_tokenizer.py --dataset data/processed/train.txt --out tokenizer/tokenizer.json --vocab_size 8192
+```
+
+Example laptop-oriented 36M training command:
+
+```bash
+python run_training.py --model_size mini_llm_32m --seq_len 256 --batch_size 1 --epochs 8 --gradient_checkpointing --fp16 --gpu_memory_fraction 0.70 --gpu_max_temp 80 --thermal_cooldown_seconds 10 --eval_every 200 --eval_batches 5 --checkpoint_dir models/checkpoints
+```
+
+This is a long training run, not part of the Quick Start.
+
+## Dashboard
+
+```bash
+python dashboard.py --port 8010
+```
+
+Open `http://127.0.0.1:8010`. The dashboard displays training loss, GPU
+temperature and utilization, VRAM, checkpoints, controls, and benchmark output.
+
+![MiniLLM training dashboard](benchmark/Screenshot.png)
+
+## Evaluation
 
 ```bash
 python evaluate.py --checkpoint models/checkpoints/best.pt
 ```
 
-Results are saved in `data/benchmarks/results_<checkpoint>.json`.
-
-The benchmark reports language-model and generation-oriented metrics. Results
-should be interpreted as comparisons between MiniLLM checkpoints, not as direct
-comparisons with large instruction-tuned production models.
-
-Dashboard API:
-
-```http
-POST /api/evaluate
-Content-Type: application/json
-
-{"checkpoint_path":"models/checkpoints/best.pt"}
-```
-
-## Project Layout
-
-```text
-model/       transformer architecture and configs
-training/    trainer, dataset loader, checkpoints, controls
-tokenizer/   BPE tokenizer build and artifacts
-data/        raw builders, processed dataset, logs, plots
-chat/        local Chat Mode API and UI
-benchmark/   evaluation dataset and metrics
-ui/          local UI assets
-utils/       helpers, quantization, plotting
-tests/       test suite
-export/      export artifacts
-```
+Results are saved under `data/benchmarks/`. Perplexity, token accuracy,
+coherence heuristics, and repetition scores are intended for comparisons
+between this project's checkpoints. They are not directly comparable with
+instruction-tuned production LLM benchmarks.
 
 ## Tests
 
-Run the complete test suite with:
-
 ```bash
 python run_all_tests.py
+python verify_project_structure.py
 ```
 
-The suite checks:
+The runner treats skipped dependency-backed tests as failures, so an `OK`
+summary now means that the model, generation, dataset, Chat Mode, Quick Start,
+and end-to-end paths actually ran.
 
-- tokenizer UTF-8 round-trip and serialization;
-- model forward pass and output shapes;
-- causal masking against future-token leakage;
-- tied token-embedding and output weights;
-- isolation between training and validation windows;
-- token-cache invalidation after source changes;
-- autoregressive generation;
-- a lightweight end-to-end model path.
+## Project layout
 
-The same suite runs automatically on GitHub Actions for pushes and pull requests.
+```text
+model/       Transformer architecture and configurations
+training/    dataset, trainer, checkpoints, controls, and statistics
+tokenizer/   byte-level BPE implementation and builder
+inference/   shared deterministic/sampled generation path
+chat/        model-first local Chat Mode
+benchmark/   evaluation dataset and metrics
+data/        educational fixtures and generated local artifacts
+ui/          separate inference UI assets
+tests/       automated regression suite
+```
 
-## Release
+## Limitations
 
-Current release: `v1.0.0`
-
-Roadmap:
-
-- More diverse and deduplicated training data.
-- Document-level dataset splitting for multi-document corpora.
-- LoRA experimentation with a small pretrained baseline.
-- More benchmark categories.
-- Model card and dataset card.
-- ONNX or TorchScript export.
+- A from-scratch 36M model needs substantially more high-quality data and
+  compute than the smoke demo to produce coherent language.
+- The bundled corpus is synthetic and deliberately small.
+- Int8/int4 utilities compress checkpoints and then dequantize weights for the
+  standard PyTorch model; they are not optimized quantized inference kernels.
+- The heuristic quality fallback is transparent but does not improve the model
+  weights. Better quality requires better data, training, and evaluation.
 
 ## License
 
-MIT License. See [LICENSE](LICENSE).
+MIT License. See [`LICENSE`](LICENSE).

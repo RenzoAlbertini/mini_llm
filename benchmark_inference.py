@@ -42,7 +42,7 @@ def benchmark_mode(mode, args, tokenizer, device):
     if device.type == "cuda":
         torch.cuda.synchronize()
     elapsed = time.perf_counter() - start
-    generated_tokens = max(1, len(tokenizer.encode(text)) - len(tokenizer.encode(args.prompt, add_bos=True)))
+    generated_tokens = max(1, len(tokenizer.encode(text)))
     return {
         "mode": mode,
         "status": "OK",
@@ -57,7 +57,7 @@ def benchmark_mode(mode, args, tokenizer, device):
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark semplice di inferenza mini_llm.")
-    parser.add_argument("--checkpoint", default="checkpoints/final.pt")
+    parser.add_argument("--checkpoint", default="models/checkpoints/best.pt")
     parser.add_argument("--quantized_checkpoint", default=None)
     parser.add_argument("--tokenizer", default="tokenizer/tokenizer.json")
     parser.add_argument("--prompt", default="python is")

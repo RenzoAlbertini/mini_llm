@@ -4,7 +4,7 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description="Valida checkpoint, tokenizer e generazione.")
-    parser.add_argument("--checkpoint", default="checkpoints/final.pt")
+    parser.add_argument("--checkpoint", default="models/checkpoints/best.pt")
     parser.add_argument("--tokenizer", default="tokenizer/tokenizer.json")
     parser.add_argument("--quantized", action="store_true")
     parser.add_argument("--min_tokens", type=int, default=8)

@@ -13,7 +13,7 @@ def random_prompt():
 
 def main():
     parser = argparse.ArgumentParser(description="Stress test generazione mini_llm.")
-    parser.add_argument("--checkpoint", default="checkpoints/final.pt")
+    parser.add_argument("--checkpoint", default="models/checkpoints/best.pt")
     parser.add_argument("--tokenizer", default="tokenizer/tokenizer.json")
     parser.add_argument("--quantized", action="store_true")
     parser.add_argument("--prompts", type=int, default=100)
@@ -41,7 +41,7 @@ def main():
         try:
             text = generate(model, tokenizer, prompt, max_new_tokens=args.max_new_tokens, device=device)
             elapsed = time.perf_counter() - t0
-            tokens = max(1, len(tokenizer.encode(text)) - len(tokenizer.encode(prompt, add_bos=True)))
+            tokens = max(1, len(tokenizer.encode(text)))
             rows.append({"prompt": prompt, "seconds": elapsed, "tokens": tokens, "tokens_per_second": tokens / elapsed})
         except Exception as exc:
             failures += 1

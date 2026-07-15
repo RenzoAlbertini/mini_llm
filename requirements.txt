@@ -1,6 +1,6 @@
-torch
-fastapi
-uvicorn
-requests
+torch>=2.2,<3
+fastapi>=0.110,<1
+uvicorn>=0.29,<1
+requests>=2.31,<3
 # Optional for NF4-style 4-bit workflows when supported by your platform:
 # bitsandbytes

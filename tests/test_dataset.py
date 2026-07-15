@@ -23,6 +23,14 @@ class DatasetTest(unittest.TestCase):
         self.assertLess(int(train_tokens[-1]), int(val_tokens[0]))
         self.assertGreaterEqual(int(val_tokens[0]) - int(train_tokens[-1]), 32)
 
+    def test_small_validation_fraction_still_has_a_complete_window(self):
+        tokens = torch.arange(1000)
+        train_loader, val_loader = create_dataloaders(
+            tokens, seq_len=64, batch_size=4, val_fraction=0.05, stride=1
+        )
+        self.assertGreater(len(train_loader.dataset), 0)
+        self.assertGreater(len(val_loader.dataset), 0)
+
     def test_token_cache_is_invalidated_when_source_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

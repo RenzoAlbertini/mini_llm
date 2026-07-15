@@ -3,11 +3,18 @@ from setuptools import find_packages, setup
 
 setup(
     name="mini_llm",
-    version="1.0.0",
+    version="1.1.0",
     description="MiniLLM - Lightweight Local Language Model",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    py_modules=["mini_llm"],
+    py_modules=[
+        "api_server", "benchmark_inference", "checkpoint_manager", "cli",
+        "config_manager", "dashboard", "demo_interactive", "evaluate",
+        "evaluate_model", "export_model", "finetune", "memory_manager", "mini_llm",
+        "pipeline", "pre_training_check", "profile_gpu", "run_all_tests",
+        "run_generate", "run_training", "sanity_check", "stress_test", "ui_server",
+        "validate_model", "verify_project_structure",
+    ],
     packages=find_packages(
         include=[
             "agents",
@@ -16,6 +23,8 @@ setup(
             "benchmark.*",
             "chat",
             "chat.*",
+            "data",
+            "data.*",
             "inference",
             "inference.*",
             "model",
@@ -28,11 +37,14 @@ setup(
             "tokenizer.*",
             "training",
             "training.*",
+            "ui",
+            "ui.*",
             "utils",
             "utils.*",
         ]
     ),
-    install_requires=["torch", "fastapi", "uvicorn", "requests"],
+    install_requires=["torch>=2.2,<3", "fastapi>=0.110,<1", "uvicorn>=0.29,<1", "requests>=2.31,<3"],
+    package_data={"benchmark": ["dataset.jsonl"], "ui": ["*.html", "*.css", "*.js", "*.png"]},
     python_requires=">=3.10",
     license="MIT",
     entry_points={"console_scripts": ["mini-llm=cli:main"]},

@@ -17,7 +17,7 @@ CHAT_HTML = r"""<!doctype html>
     .assistant { align-self:flex-start; background:var(--assistant); }
     .role { color:var(--muted); font-size:12px; margin-bottom:4px; }
     footer { border-top:1px solid var(--line); background:#101317; padding:12px; display:grid; gap:10px; }
-    .controls { display:grid; grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(90px, 130px)); gap:8px; }
+    .controls { display:grid; grid-template-columns: minmax(180px, 1fr) repeat(4, minmax(90px, 130px)); gap:8px; }
     .composer { display:grid; grid-template-columns:1fr auto; gap:8px; }
     input, select, textarea, button { border:1px solid var(--line); background:#0f1216; color:var(--text); border-radius:6px; padding:9px 10px; font:inherit; }
     textarea { min-height:54px; max-height:160px; resize:vertical; }
@@ -30,7 +30,7 @@ CHAT_HTML = r"""<!doctype html>
 <body>
   <header>
     <h1>MiniLLM Chat Mode</h1>
-    <div class="status" id="status">professional local mode</div>
+    <div class="status" id="status">model-first local mode</div>
   </header>
   <main id="chat"></main>
   <footer>
@@ -39,6 +39,10 @@ CHAT_HTML = r"""<!doctype html>
       <input id="temperature" type="number" min="0.1" max="1.2" step="0.05" value="0.45" title="temperature" />
       <input id="topP" type="number" min="0.1" max="1" step="0.01" value="0.82" title="top_p" />
       <input id="maxTokens" type="number" min="1" max="160" step="1" value="80" title="max_tokens" />
+      <select id="decodeMode" title="decoding mode">
+        <option value="greedy">Greedy</option>
+        <option value="sample">Sampling</option>
+      </select>
     </div>
     <div class="composer">
       <textarea id="prompt" placeholder="Scrivi un messaggio a MiniLLM..."></textarea>
@@ -62,8 +66,14 @@ CHAT_HTML = r"""<!doctype html>
       const res = await fetch('/api/chat/checkpoints');
       const data = await res.json();
       const select = document.getElementById('checkpoint');
-      select.innerHTML = data.checkpoints.map(c => `<option value="${c.path}" ${c.active ? 'selected' : ''}>${c.name}</option>`).join('');
-      statusEl.textContent = `checkpoint: ${data.active_checkpoint || 'none'}`;
+      select.replaceChildren(...data.checkpoints.map(checkpoint => {
+        const option = document.createElement('option');
+        option.value = checkpoint.path;
+        option.textContent = checkpoint.name;
+        option.selected = checkpoint.active;
+        return option;
+      }));
+      statusEl.textContent = data.checkpoints.length ? `checkpoint: ${data.active_checkpoint}` : 'No checkpoint found — run the Quick Start first';
     }
     async function sendMessage() {
       const promptEl = document.getElementById('prompt');
@@ -80,17 +90,29 @@ CHAT_HTML = r"""<!doctype html>
         temperature: Number(document.getElementById('temperature').value),
         top_p: Number(document.getElementById('topP').value),
         max_tokens: Number(document.getElementById('maxTokens').value),
+        do_sample: document.getElementById('decodeMode').value === 'sample',
+        seed: 42,
         stream: true
       };
       const res = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+      if (!res.ok) {
+        const error = await res.json();
+        assistantSpan.textContent = error.error || 'Chat request failed';
+        statusEl.textContent = `error ${res.status}`;
+        return;
+      }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let text = '';
+      let buffer = '';
+      let source = 'model';
       while (true) {
         const {done, value} = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, {stream:true});
-        for (const line of chunk.split('\n')) {
+        buffer += decoder.decode(value, {stream:true});
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const data = line.slice(6).trim();
           if (!data || data === '[DONE]') continue;
@@ -101,9 +123,10 @@ CHAT_HTML = r"""<!doctype html>
             chat.scrollTop = chat.scrollHeight;
           }
           if (event.history) history = event.history;
+          if (event.source) source = event.source;
         }
       }
-      statusEl.textContent = `checkpoint: ${document.getElementById('checkpoint').value}`;
+      statusEl.textContent = `${source} · ${document.getElementById('decodeMode').value}`;
     }
     document.getElementById('send').addEventListener('click', sendMessage);
     document.getElementById('prompt').addEventListener('keydown', e => {

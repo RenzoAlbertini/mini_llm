@@ -6,7 +6,7 @@ from contextlib import nullcontext
 from pathlib import Path
 
 import torch
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 
 from checkpoint_manager import CheckpointManager
 from config_manager import TrainingConfig, save_run_config
@@ -37,7 +37,7 @@ def evaluate(model, loader, device, max_batches=20, amp_dtype=None):
             break
         x = x.to(device)
         y = y.to(device)
-        with autocast(enabled=True, dtype=amp_dtype) if use_amp else nullcontext():
+        with autocast(device_type=device.type, enabled=True, dtype=amp_dtype) if use_amp else nullcontext():
             _, loss = model(x, y)
         losses.append(loss.item())
     model.train()
@@ -264,7 +264,7 @@ def train_model(args, config=None):
         precision.name = "fp16"
     use_amp = precision.use_amp
     amp_dtype = precision.dtype
-    scaler = GradScaler(enabled=use_amp and amp_dtype == torch.float16)
+    scaler = GradScaler("cuda", enabled=use_amp and amp_dtype == torch.float16)
     stats = TrainingStats(args.stats_path)
     checkpoints = CheckpointManager(args.checkpoint_dir)
 
@@ -317,7 +317,7 @@ def train_model(args, config=None):
                             xb = x[start:start + micro_batch_size]
                             yb = y[start:start + micro_batch_size]
                             chunks += 1
-                            with autocast(enabled=True, dtype=amp_dtype) if use_amp else nullcontext():
+                            with autocast(device_type=device.type, enabled=True, dtype=amp_dtype) if use_amp else nullcontext():
                                 _, chunk_loss = model(xb, yb)
                                 scaled_loss = chunk_loss * (xb.size(0) / x.size(0))
                             scaler.scale(scaled_loss).backward()
@@ -341,7 +341,7 @@ def train_model(args, config=None):
                             precision = fallback
                             use_amp = precision.use_amp
                             amp_dtype = precision.dtype
-                            scaler = GradScaler(enabled=use_amp and amp_dtype == torch.float16)
+                            scaler = GradScaler("cuda", enabled=use_amp and amp_dtype == torch.float16)
                             print(f"OOM CUDA: fallback precision={precision.name}")
                             continue
                         raise
