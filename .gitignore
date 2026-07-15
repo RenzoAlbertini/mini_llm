@@ -15,6 +15,14 @@ data/raw/dataset_large.txt
 data/raw/dataset_large_test.txt
 data/raw/dialogue/
 data/raw/downloads/
+data/raw/wikipedia.json
+data/raw/gutenberg.json
+data/raw/openassistant.json
+data/raw/squad.json
+data/raw/natural_dialogs.json
+data/raw/instructions.json
+data/raw/natural_responses.json
+data/raw/technical_text.json
 
 models/checkpoints/
 models/quantized/

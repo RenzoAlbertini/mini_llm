@@ -51,7 +51,7 @@ def save_safetensors(state_dict, path):
 
 def main():
     parser = argparse.ArgumentParser(description="Esporta modello, tokenizer e config in export/.")
-    parser.add_argument("--checkpoint", default="checkpoints/final.pt")
+    parser.add_argument("--checkpoint", default="models/checkpoints/best.pt")
     parser.add_argument("--quantized_checkpoint", default=None)
     parser.add_argument("--tokenizer", default="tokenizer/tokenizer.json")
     parser.add_argument("--out_dir", default="export")
@@ -63,7 +63,7 @@ def main():
         print("FAIL: PyTorch non installato")
         return 1
 
-    checkpoint = torch.load(args.checkpoint, map_location="cpu")
+    checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 

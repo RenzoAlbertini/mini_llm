@@ -56,7 +56,7 @@ def save_checkpoint(path, model, optimizer=None, config=None, step=0, val_loss=N
 
 
 def load_checkpoint(path, model=None, optimizer=None, device="cpu"):
-    checkpoint = torch.load(path, map_location=device)
+    checkpoint = torch.load(path, map_location=device, weights_only=True)
     if model is not None:
         model.load_state_dict(checkpoint["model"])
     if optimizer is not None and "optimizer" in checkpoint:
@@ -71,7 +71,7 @@ def save_weights(path, model):
 
 
 def load_weights(path, model, device="cpu"):
-    state_dict = torch.load(path, map_location=device)
+    state_dict = torch.load(path, map_location=device, weights_only=True)
     model.load_state_dict(state_dict)
     return model
 

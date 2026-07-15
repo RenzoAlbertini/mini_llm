@@ -4,12 +4,29 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mini_llm"
-version = "1.0.0"
+version = "1.1.0"
 description = "MiniLLM - Lightweight Local Language Model"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-dependencies = ["torch", "fastapi", "uvicorn", "requests"]
+dependencies = ["torch>=2.2,<3", "fastapi>=0.110,<1", "uvicorn>=0.29,<1", "requests>=2.31,<3"]
 
 [project.scripts]
 mini-llm = "cli:main"
+
+[tool.setuptools]
+py-modules = [
+  "api_server", "benchmark_inference", "checkpoint_manager", "cli",
+  "config_manager", "dashboard", "demo_interactive", "evaluate",
+  "evaluate_model", "export_model", "finetune", "memory_manager", "mini_llm",
+  "pipeline", "pre_training_check", "profile_gpu", "run_all_tests",
+  "run_generate", "run_training", "sanity_check", "stress_test", "ui_server",
+  "validate_model", "verify_project_structure"
+]
+
+[tool.setuptools.packages.find]
+include = ["agents*", "benchmark*", "chat*", "data*", "inference*", "model*", "plugins*", "tokenizer*", "training*", "ui*", "utils*"]
+
+[tool.setuptools.package-data]
+benchmark = ["dataset.jsonl"]
+ui = ["*.html", "*.css", "*.js", "*.png"]

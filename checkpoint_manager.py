@@ -87,7 +87,7 @@ class CheckpointManager:
         checkpoint["_model_state_adjusted"] = adjusted
 
     def load(self, path, model=None, optimizer=None, scheduler=None, device="cpu"):
-        checkpoint = torch.load(path, map_location=device)
+        checkpoint = torch.load(path, map_location=device, weights_only=True)
         if model is not None:
             self._load_model_state(checkpoint, model)
         adjusted = checkpoint.get("_model_state_adjusted", False)

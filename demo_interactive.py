@@ -3,7 +3,7 @@ import argparse
 
 def main():
     parser = argparse.ArgumentParser(description="Chat interattiva terminale con mini_llm.")
-    parser.add_argument("--checkpoint", default="checkpoints/final.pt")
+    parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--tokenizer", default="tokenizer/tokenizer.json")
     parser.add_argument("--quantized", action="store_true")
     parser.add_argument("--temperature", type=float, default=0.8)
@@ -11,6 +11,8 @@ def main():
     parser.add_argument("--top_p", type=float, default=0.95)
     parser.add_argument("--max_new_tokens", type=int, default=120)
     parser.add_argument("--stream", action="store_true", help="Compatibilita CLI: la demo stampa gia in streaming.")
+    parser.add_argument("--sample", action="store_true", help="Abilita sampling; default greedy deterministico.")
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     try:
@@ -45,6 +47,8 @@ def main():
             temperature=args.temperature,
             top_k=args.top_k,
             top_p=args.top_p,
+            do_sample=args.sample,
+            seed=args.seed,
             stream_callback=stream,
             device=device,
         )

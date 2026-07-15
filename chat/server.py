@@ -13,14 +13,22 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import torch
-import torch.nn.functional as F
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from chat.ui import CHAT_HTML
-from inference.generate import top_k_filter, top_p_filter
+from inference.generate import generate, validate_model_tokenizer
 from tokenizer.tokenizer import BPETokenizer
 from utils.helpers import get_device
+
+
+def public_checkpoint_path(path):
+    """Return a useful checkpoint identifier without exposing a home path."""
+    resolved = Path(path).resolve()
+    try:
+        return str(resolved.relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return resolved.name
 
 
 class ChatRuntime:
@@ -43,37 +51,45 @@ class ChatRuntime:
         return torch.device(self.device_name)
 
     def load(self, checkpoint_path=None):
-        checkpoint_path = str(checkpoint_path or self.active_checkpoint or self.default_checkpoint)
-        self.active_checkpoint = checkpoint_path
+        checkpoint_path = str(Path(checkpoint_path or self.active_checkpoint or self.default_checkpoint).resolve())
         if checkpoint_path in self.loaded:
+            self.active_checkpoint = checkpoint_path
             return self.loaded[checkpoint_path]
         from inference.generate import load_model
 
-        device = self.device()
-        model = load_model(checkpoint_path, device, quantized=False)
-        if self.fp16 and device.type == "cuda":
-            model = model.half()
-        model.eval()
-        self.loaded[checkpoint_path] = (model, device)
-        self.last_error = None
-        return model, device
+        try:
+            device = self.device()
+            model = load_model(checkpoint_path, device, quantized=False)
+            validate_model_tokenizer(model, self.tokenizer)
+            if self.fp16 and device.type == "cuda":
+                model = model.half()
+            model.eval()
+            self.loaded[checkpoint_path] = (model, device)
+            self.active_checkpoint = checkpoint_path
+            self.last_error = None
+            return model, device
+        except Exception as exc:
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            raise
 
     def list_checkpoints(self):
         paths = []
         if self.checkpoint_dir.exists():
-            paths.extend(sorted(self.checkpoint_dir.glob("*.pt"), key=lambda p: p.stat().st_mtime, reverse=True))
+            paths.extend(sorted(self.checkpoint_dir.rglob("*.pt"), key=lambda p: p.stat().st_mtime, reverse=True))
         seen = set()
         rows = []
         active_path = Path(self.active_checkpoint).resolve()
         for path in [Path(self.active_checkpoint), *paths]:
-            if not path.exists() or str(path) in seen:
+            if not path.is_file():
                 continue
-            seen.add(str(path))
             resolved = path.resolve()
+            if str(resolved) in seen:
+                continue
+            seen.add(str(resolved))
             rows.append(
                 {
                     "name": path.name,
-                    "path": str(path),
+                    "path": public_checkpoint_path(resolved),
                     "size_mb": round(path.stat().st_size / (1024 * 1024), 2),
                     "modified": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(path.stat().st_mtime)),
                     "active": resolved == active_path,
@@ -109,35 +125,6 @@ def clean_response(text):
             text = text.split(stop, 1)[0]
     text = re.sub(r"\s+", " ", text).strip()
     return text
-
-
-@torch.no_grad()
-def generate_tokens(model, tokenizer, device, prompt_text, max_tokens=96, temperature=0.45, top_p=0.82, top_k=35):
-    ids = tokenizer.encode(prompt_text, add_bos=True)
-    x = torch.tensor([ids], dtype=torch.long, device=device)
-    generated = []
-    generated_ids = []
-    for _ in range(max(1, int(max_tokens))):
-        x_cond = x[:, -model.config.seq_len :]
-        logits, _ = model(x_cond)
-        logits = logits[:, -1, :] / max(float(temperature), 1e-6)
-        for seen_id in set(generated_ids):
-            logits[:, seen_id] = logits[:, seen_id] / 1.12
-        logits = top_k_filter(logits, int(top_k))
-        logits = top_p_filter(logits, float(top_p))
-        probs = F.softmax(logits, dim=-1)
-        next_id = torch.multinomial(probs, num_samples=1)
-        token_id = int(next_id.item())
-        if token_id == tokenizer.eos_id:
-            break
-        x = torch.cat([x, next_id], dim=1)
-        generated_ids.append(token_id)
-        piece = tokenizer.decode([token_id])
-        generated.append(piece)
-        cleaned = clean_response("".join(generated))
-        if any(stop in cleaned for stop in ["User:", "Assistant:"]):
-            break
-        yield piece, cleaned
 
 
 def words(text):
@@ -342,16 +329,53 @@ def looks_incoherent(text):
 
 
 def fallback_response(prompt, candidate):
+    if not looks_incoherent(candidate):
+        return clean_response(candidate)
     canned = canned_response(prompt)
     if canned:
         return canned
-    if looks_incoherent(candidate):
-        return (
-            "Non ho generato una risposta affidabile con questo checkpoint. "
-            "Il modello MiniLLM-32M è ancora piccolo e non completamente instruction-tuned; "
-            "posso comunque aiutarti con domande semplici o puoi provare un checkpoint fine-tuned."
-        )
-    return clean_response(candidate)
+    return (
+        "Il checkpoint e stato eseguito, ma la risposta non ha superato il controllo di qualita. "
+        "Prova un prompt piu semplice oppure un checkpoint addestrato piu a lungo."
+    )
+
+
+def generate_chat_candidate(
+    runtime,
+    checkpoint_path,
+    prompt_text,
+    max_tokens,
+    temperature,
+    top_p,
+    top_k,
+    do_sample=False,
+    seed=42,
+):
+    """Run the selected checkpoint for every chat request."""
+    model, device = runtime.load(checkpoint_path)
+    return generate(
+        model,
+        runtime.tokenizer,
+        prompt_text,
+        max_new_tokens=max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k,
+        repetition_penalty=1.12,
+        do_sample=do_sample,
+        seed=seed,
+        stop_sequences=parse_chat_stop_sequences(runtime.tokenizer),
+        device=device,
+    )
+
+
+def parse_chat_stop_sequences(tokenizer):
+    stops = [(tokenizer.eos_id,)]
+    for text in ("\nUser:", "\nAssistant:"):
+        token_ids = tokenizer.encode(text)
+        if token_ids:
+            stops.append(tuple(token_ids))
+    return stops
 
 
 def chunk_text(text, size=10):
@@ -372,7 +396,10 @@ def make_app(runtime):
 
     @app.get("/api/chat/checkpoints")
     def checkpoints():
-        return {"active_checkpoint": runtime.active_checkpoint, "checkpoints": runtime.list_checkpoints()}
+        return {
+            "active_checkpoint": public_checkpoint_path(runtime.active_checkpoint),
+            "checkpoints": runtime.list_checkpoints(),
+        }
 
     @app.post("/api/chat")
     async def chat(payload: dict):
@@ -386,43 +413,53 @@ def make_app(runtime):
         top_k = int(payload.get("top_k", 35))
         max_tokens = min(max(int(payload.get("max_tokens", payload.get("max_new_tokens", 80))), 1), 160)
         stream = bool(payload.get("stream", False))
-        direct_response = professional_response(prompt, history)
-        if direct_response:
-            new_history = [*history, {"role": "user", "content": prompt}, {"role": "assistant", "content": direct_response}]
-            if stream:
-                async def direct_events():
-                    for piece in chunk_text(direct_response):
-                        yield f"data: {json.dumps({'token': piece})}\n\n"
-                        await asyncio.sleep(0)
-                    yield f"data: {json.dumps({'done': True, 'response': direct_response, 'history': new_history})}\n\n"
-                    yield "data: [DONE]\n\n"
+        do_sample = bool(payload.get("do_sample", False))
+        seed = int(payload.get("seed", 42))
 
-                return StreamingResponse(direct_events(), media_type="text/event-stream")
-            return {"response": direct_response, "history": new_history, "checkpoint": runtime.active_checkpoint, "source": "professional_layer"}
+        allowed = {str(Path(row["path"]).resolve()) for row in runtime.list_checkpoints()}
+        requested = str(Path(checkpoint_path).resolve())
+        if requested not in allowed:
+            return JSONResponse({"error": "checkpoint non disponibile nella directory configurata"}, status_code=400)
 
         prompt_text = build_prompt(prompt, history)
-        model, device = runtime.load(checkpoint_path)
-
-        generated_parts = []
-        candidate = ""
-        for token, cleaned in generate_tokens(model, runtime.tokenizer, device, prompt_text, max_tokens, temperature, top_p, top_k):
-            generated_parts.append(token)
-            candidate = cleaned
-        response = fallback_response(prompt, candidate or "".join(generated_parts))
+        try:
+            candidate = generate_chat_candidate(
+                runtime,
+                requested,
+                prompt_text,
+                max_tokens,
+                temperature,
+                top_p,
+                top_k,
+                do_sample=do_sample,
+                seed=seed,
+            )
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Impossibile eseguire il checkpoint: {type(exc).__name__}: {exc}"},
+                status_code=503,
+            )
+        used_fallback = looks_incoherent(candidate)
+        response = fallback_response(prompt, candidate)
+        source = "quality_fallback_after_model" if used_fallback else "model"
+        new_history = [*history, {"role": "user", "content": prompt}, {"role": "assistant", "content": response}]
 
         if stream:
             async def events():
                 for piece in chunk_text(response):
                     yield f"data: {json.dumps({'token': piece})}\n\n"
                     await asyncio.sleep(0)
-                new_history = [*history, {"role": "user", "content": prompt}, {"role": "assistant", "content": response}]
-                yield f"data: {json.dumps({'done': True, 'response': response, 'history': new_history})}\n\n"
+                yield f"data: {json.dumps({'done': True, 'response': response, 'history': new_history, 'source': source, 'checkpoint': public_checkpoint_path(runtime.active_checkpoint)})}\n\n"
                 yield "data: [DONE]\n\n"
 
             return StreamingResponse(events(), media_type="text/event-stream")
 
-        new_history = [*history, {"role": "user", "content": prompt}, {"role": "assistant", "content": response}]
-        return {"response": response, "history": new_history, "checkpoint": runtime.active_checkpoint}
+        return {
+            "response": response,
+            "history": new_history,
+            "checkpoint": public_checkpoint_path(runtime.active_checkpoint),
+            "source": source,
+        }
 
     return app
 

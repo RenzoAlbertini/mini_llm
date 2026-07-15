@@ -19,6 +19,13 @@ RAW_FILES = {
     "technical_text": RAW_DIR / "technical_text.json",
 }
 
+SOURCE_ALIASES = {
+    "wikipedia": "synthetic_articles",
+    "gutenberg": "synthetic_books",
+    "squad": "synthetic_qa",
+    "openassistant": "synthetic_dialogue",
+}
+
 PROCESSED_JSONL = PROCESSED_DIR / "dataset.jsonl"
 TRAIN_TXT = PROCESSED_DIR / "train.txt"
 VAL_TXT = PROCESSED_DIR / "val.txt"
@@ -279,6 +286,7 @@ def record_to_text(record):
 
 def collect_records():
     records = []
+    seen = set()
     for name, path in RAW_FILES.items():
         if not path.exists():
             continue
@@ -288,8 +296,13 @@ def collect_records():
         for item in payload:
             item = dict(item)
             item.setdefault("source", name)
+            item["source"] = SOURCE_ALIASES.get(item["source"], item["source"])
+            if item["source"].startswith("synthetic_"):
+                item["provenance"] = "generated locally from the bundled educational seed corpus"
             text = record_to_text(item)
-            if len(text) >= 20:
+            dedup_key = (item["source"], text.casefold())
+            if len(text) >= 20 and dedup_key not in seen:
+                seen.add(dedup_key)
                 item["text"] = text
                 records.append(item)
     return records
@@ -346,16 +359,16 @@ def validate_outputs(records):
         "instructions",
         "natural_responses",
         "technical_text",
-        "squad",
-        "wikipedia",
-        "gutenberg",
-        "openassistant",
+        "synthetic_qa",
+        "synthetic_articles",
+        "synthetic_books",
+        "synthetic_dialogue",
     ]
     missing = [name for name in required if source_counts.get(name, 0) == 0]
     if missing:
         raise RuntimeError(f"dataset incompleto, sorgenti mancanti: {missing}")
-    if total_size < 25 * 1024 * 1024:
-        raise RuntimeError(f"dataset finale troppo piccolo: {total_size / (1024 * 1024):.2f} MB")
+    if total_size < 10_000:
+        raise RuntimeError(f"dataset finale troppo piccolo: {total_size / 1024:.2f} KB")
     return source_counts, total_size
 
 

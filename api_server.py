@@ -20,13 +20,15 @@ class Runtime:
         if self.model is not None or self.error is not None:
             return
         try:
-            from inference.generate import load_model
+            from inference.generate import load_model, resolve_checkpoint_path, validate_model_tokenizer
             from tokenizer.tokenizer import BPETokenizer
             from utils.helpers import count_parameters, get_device
 
             self.device = get_device()
             self.tokenizer = BPETokenizer.load_model(self.tokenizer_path)
+            self.checkpoint = resolve_checkpoint_path(self.checkpoint)
             self.model = load_model(self.checkpoint, self.device, quantized=self.quantized)
+            validate_model_tokenizer(self.model, self.tokenizer)
             self.parameters = count_parameters(self.model)
         except RuntimeError as exc:
             if "out of memory" in str(exc).lower() and self.quantized_checkpoint:
@@ -115,6 +117,8 @@ def make_handler(runtime, production=False, timeout=30.0):
                         temperature=float(body.get("temperature", 0.8)),
                         top_k=int(body.get("top_k", 50)),
                         top_p=float(body.get("top_p", 0.95)),
+                        do_sample=bool(body.get("do_sample", False)),
+                        seed=int(body.get("seed", 42)),
                         device=runtime.device,
                     )
 
@@ -179,7 +183,9 @@ def create_fastapi_app(runtime, timeout=30.0):
     def generate_endpoint(payload: dict):
         runtime.load()
         if runtime.error:
-            return {"error": runtime.error}
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse({"error": runtime.error}, status_code=503)
         from inference.generate import generate
 
         text = generate(
@@ -190,15 +196,19 @@ def create_fastapi_app(runtime, timeout=30.0):
             temperature=float(payload.get("temperature", 0.8)),
             top_k=int(payload.get("top_k", 50)),
             top_p=float(payload.get("top_p", 0.95)),
+            do_sample=bool(payload.get("do_sample", False)),
+            seed=int(payload.get("seed", 42)),
             device=runtime.device,
         )
-        return {"text": text}
+        return {"text": text, "source": "model"}
 
     @app.post("/evaluate")
     def evaluate_endpoint(payload: dict):
         runtime.load()
         if runtime.error:
-            return {"error": runtime.error}
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse({"error": runtime.error}, status_code=503)
         import math
         import torch
 
@@ -216,7 +226,7 @@ def create_fastapi_app(runtime, timeout=30.0):
 
 def main():
     parser = argparse.ArgumentParser(description="API locale mini_llm.")
-    parser.add_argument("--checkpoint", default="checkpoints/final.pt")
+    parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--quantized_checkpoint", default=None)
     parser.add_argument("--tokenizer", default="tokenizer/tokenizer.json")
     parser.add_argument("--quantized", action="store_true")

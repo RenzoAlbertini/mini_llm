@@ -93,7 +93,7 @@ def make_config(args):
 def apply_mode(args):
     if args.mode == "debug":
         args.batch_size = min(args.batch_size, 2)
-        args.max_steps = min(args.max_steps, 20)
+        args.max_steps = 20 if args.max_steps <= 0 else min(args.max_steps, 20)
         args.eval_every = min(args.eval_every, 10)
         args.log_every = 1
         args.seq_len = min(args.seq_len or 64, 64)
@@ -108,25 +108,35 @@ def prepare_demo_assets(args):
     from data.raw.prepare_dataset import SAMPLE_TEXT, clean_text
 
     print("modalita demo: preparo dataset piccolo e run breve di prova")
-    args.data_dir = "data/raw"
+    args.data_dir = "data/processed/demo_dataset.txt"
     args.processed = "data/processed/demo_tokens.pt"
-    args.checkpoint_dir = "checkpoints/demo"
+    args.checkpoint_dir = "models/checkpoints/demo"
     args.stats_path = "data/logs/demo_training_stats.csv"
     args.plots_dir = "data/plots/demo"
     args.batch_size = min(args.batch_size, 4)
     args.epochs = 1
-    args.max_steps = min(args.max_steps, 20)
+    args.max_steps = 20 if args.max_steps <= 0 else min(args.max_steps, 20)
     args.eval_every = min(args.eval_every, 10)
     args.log_every = 1
+    warmup_steps = getattr(args, "warmup_steps", None)
+    args.warmup_steps = 2 if warmup_steps is None else min(warmup_steps, 2)
+    args.seq_len = args.seq_len or 64
+    args.d_model = args.d_model or 64
+    args.n_layers = args.n_layers or 2
+    args.n_heads = args.n_heads or 4
+    args.d_ff = args.d_ff or 192
 
-    dataset_path = Path(args.data_dir) / "dataset.txt"
+    dataset_path = Path(args.data_dir)
     dataset_path.parent.mkdir(parents=True, exist_ok=True)
     dataset_path.write_text(clean_text(SAMPLE_TEXT), encoding="utf-8")
 
+    if args.tokenizer == "tokenizer/tokenizer.json":
+        args.tokenizer = "data/processed/demo_tokenizer.json"
     tokenizer_path = Path(args.tokenizer)
     tokenizer_path.parent.mkdir(parents=True, exist_ok=True)
     tokenizer = train_byte_bpe(dataset_path.read_text(encoding="utf-8"), vocab_size=512)
     tokenizer.save_model(tokenizer_path)
+    args.vocab_size = tokenizer.vocab_size
 
     processed_path = Path(args.processed)
     if processed_path.exists():
@@ -211,7 +221,7 @@ def main():
     sys.stdout = logger
     started = time.perf_counter()
     try:
-        _main(args)
+        return _main(args)
     finally:
         elapsed = time.perf_counter() - started
         print(f"log salvato in {args.log_path}")
@@ -244,7 +254,7 @@ def _main(args):
     except ModuleNotFoundError as exc:
         if exc.name == "torch":
             print("PyTorch non installato. Installa le dipendenze con: pip install -r requirements.txt")
-            return
+            return 2
         raise
 
     final_path = train_model(args, config=config)
@@ -271,6 +281,7 @@ def _main(args):
         print(f"checkpoint quantizzato salvato: {quantized_path}")
 
     print("training completato")
+    return 0
 
 
 def run_profile(args, checkpoint_path):
@@ -299,4 +310,4 @@ def run_profile(args, checkpoint_path):
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

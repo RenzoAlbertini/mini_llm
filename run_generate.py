@@ -4,15 +4,21 @@ import threading
 import time
 from pathlib import Path
 
-from inference.generate import generate, load_model, parse_stop_sequences
+from inference.generate import (
+    generate,
+    load_model,
+    parse_stop_sequences,
+    resolve_checkpoint_path,
+    validate_model_tokenizer,
+)
 from tokenizer.tokenizer import BPETokenizer
 from utils.helpers import get_device, set_seed
 
 
 def main():
     parser = argparse.ArgumentParser(description="Genera testo da un checkpoint mini_llm.")
-    parser.add_argument("--checkpoint", default="models/checkpoints/mini_llm_32m_best.pt")
-    parser.add_argument("--quantized_checkpoint", default="models/quantized/mini_llm_32m_4bit.pt")
+    parser.add_argument("--checkpoint", default=None)
+    parser.add_argument("--quantized_checkpoint", default=None)
     parser.add_argument("--mode", choices=["debug", "standard", "production"], default="standard")
     parser.add_argument("--tokenizer", default="tokenizer/tokenizer.json")
     parser.add_argument("--prompt", default="python is")
@@ -20,6 +26,7 @@ def main():
     parser.add_argument("--temperature", type=float, default=0.8)
     parser.add_argument("--top_k", type=int, default=50)
     parser.add_argument("--top_p", type=float, default=0.95)
+    parser.add_argument("--sample", action="store_true", help="Abilita sampling; il default e greedy e ripetibile.")
     parser.add_argument("--stop", action="append", default=[])
     parser.add_argument("--quantized", action="store_true")
     parser.add_argument("--stream", action="store_true")
@@ -33,8 +40,13 @@ def main():
     args = parser.parse_args()
 
     set_seed(args.seed)
-    if args.quantized and args.quantized_checkpoint and Path(args.quantized_checkpoint).exists() and args.checkpoint == "models/checkpoints/mini_llm_32m_best.pt":
+    if args.quantized and args.quantized_checkpoint and Path(args.quantized_checkpoint).exists() and args.checkpoint is None:
         args.checkpoint = args.quantized_checkpoint
+    try:
+        args.checkpoint = resolve_checkpoint_path(args.checkpoint)
+    except FileNotFoundError as exc:
+        print(f"errore: {exc}")
+        return 2
     device = get_device()
     tokenizer = BPETokenizer.load_model(args.tokenizer)
     try:
@@ -47,12 +59,14 @@ def main():
             args.quantized = True
         else:
             raise
+    validate_model_tokenizer(model, tokenizer)
     stop_sequences = parse_stop_sequences(tokenizer, args.stop)
     model_type = "quantizzato" if args.quantized else "normale"
 
     if args.mode != "production":
         print(f"checkpoint: {args.checkpoint}")
         print(f"modello: {model_type}")
+        print(f"decoding: {'sampling' if args.sample else 'greedy deterministico'}")
         print(f"prompt: {args.prompt}")
         if args.mode == "debug":
             ids = tokenizer.encode(args.prompt, add_bos=True)
@@ -82,6 +96,8 @@ def main():
                 repetition_penalty=args.repetition_penalty,
                 bad_token_penalty=args.bad_token_penalty,
                 num_samples=args.num_samples,
+                do_sample=args.sample,
+                seed=args.seed,
                 device=device,
             )
         except RuntimeError as exc:
@@ -95,6 +111,8 @@ def main():
                     temperature=args.temperature,
                     top_k=args.top_k,
                     top_p=args.top_p,
+                    do_sample=args.sample,
+                    seed=args.seed,
                     device=device,
                 )
             else:
@@ -121,7 +139,8 @@ def main():
     if args.mode != "production":
         print(f"tempo generazione: {elapsed:.2f}s")
     sys.stdout.flush()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -42,21 +42,17 @@ def run_step(name, command, required=False):
 
 def main():
     parser = argparse.ArgumentParser(description="Pipeline end-to-end mini_llm.")
-    parser.add_argument("--demo", action="store_true", default=True)
     parser.add_argument("--out", default="data/pipeline/status.json")
-    parser.add_argument("--checkpoint", default="checkpoints/demo/final.pt")
+    parser.add_argument("--checkpoint", default="models/checkpoints/demo/final.pt")
     args = parser.parse_args()
 
     py = sys.executable
     steps = [
-        ("prepare_dataset", [py, "data/raw/prepare_dataset.py", "--out", "data/raw/dataset.txt"], True),
-        ("build_tokenizer", [py, "-m", "tokenizer.build_tokenizer", "--data_dir", "data/raw", "--out", "tokenizer/tokenizer.json", "--vocab_size", "512"], True),
-        ("pre_training_check", [py, "pre_training_check.py", "--processed", "data/processed/pipeline_tokens.pt"], False),
-        ("training", [py, "run_training.py", "--demo"], False),
-        ("evaluation", [py, "evaluate_model.py", "--checkpoint", args.checkpoint, "--processed", "data/processed/pipeline_eval_tokens.pt"], False),
-        ("export", [py, "export_model.py", "--checkpoint", args.checkpoint, "--out_dir", "export"], False),
-        ("benchmark", [py, "benchmark_inference.py", "--checkpoint", args.checkpoint, "--max_new_tokens", "16"], False),
-        ("generate_demo", [py, "run_generate.py", "--checkpoint", args.checkpoint, "--prompt", "python is", "--max_new_tokens", "24", "--mode", "production"], False),
+        ("training", [py, "-m", "run_training", "--demo", "--max_steps", "8"], True),
+        ("evaluation", [py, "-m", "evaluate_model", "--checkpoint", args.checkpoint, "--tokenizer", "data/processed/demo_tokenizer.json", "--data_dir", "data/processed/demo_dataset.txt", "--processed", "data/processed/pipeline_eval_tokens.pt"], True),
+        ("export", [py, "-m", "export_model", "--checkpoint", args.checkpoint, "--out_dir", "export"], True),
+        ("benchmark", [py, "-m", "benchmark_inference", "--checkpoint", args.checkpoint, "--tokenizer", "data/processed/demo_tokenizer.json", "--max_new_tokens", "16"], True),
+        ("generate_demo", [py, "-m", "run_generate", "--checkpoint", args.checkpoint, "--tokenizer", "data/processed/demo_tokenizer.json", "--prompt", "python is", "--max_new_tokens", "24", "--mode", "production"], True),
     ]
 
     started = time.perf_counter()

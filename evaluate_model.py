@@ -39,7 +39,7 @@ def evaluate_loaded(label, model, loader, device, max_batches):
 
 def main():
     parser = argparse.ArgumentParser(description="Valuta loss media e perplexity sul validation set.")
-    parser.add_argument("--checkpoint", default="checkpoints/final.pt")
+    parser.add_argument("--checkpoint", default="models/checkpoints/best.pt")
     parser.add_argument("--quantized_checkpoint", default=None)
     parser.add_argument("--compare_dtypes", action="store_true")
     parser.add_argument("--tokenizer", default="tokenizer/tokenizer.json")

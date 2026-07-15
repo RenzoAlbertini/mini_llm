@@ -34,7 +34,7 @@ def save_quantized_model(model, path, config=None):
 
 
 def load_quantized_state_dict(path, dtype=torch.float32, device="cpu"):
-    payload = torch.load(path, map_location="cpu")
+    payload = torch.load(path, map_location="cpu", weights_only=True)
     state_dict = {}
     scales = payload.get("scales", {})
     for name, tensor in payload["model"].items():

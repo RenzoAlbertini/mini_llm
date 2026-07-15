@@ -15,4 +15,6 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install fastapi uvicorn requests
       - run: python run_all_tests.py
+      - run: python verify_project_structure.py

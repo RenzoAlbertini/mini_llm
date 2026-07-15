@@ -8,6 +8,7 @@ const els = {
   topP: document.querySelector("#topP"),
   topPValue: document.querySelector("#topPValue"),
   maxNewTokens: document.querySelector("#maxNewTokens"),
+  doSample: document.querySelector("#doSample"),
   conversationalMode: document.querySelector("#conversationalMode"),
   dynamicContext: document.querySelector("#dynamicContext"),
   maxContext: document.querySelector("#maxContext"),
@@ -41,6 +42,8 @@ function payload() {
     top_k: Number(els.topK.value),
     top_p: Number(els.topP.value),
     max_new_tokens: Number(els.maxNewTokens.value),
+    do_sample: els.doSample.checked,
+    seed: 42,
     dynamic_context: els.dynamicContext.checked,
     max_context: Number(els.maxContext.value),
   };
@@ -75,7 +78,7 @@ function generate() {
       renderMetrics(data.metrics);
     } else if (data.type === "done") {
       flushStreamBuffer();
-      setStatus("Done");
+      setStatus(`Done · ${data.source || "model"}`);
       els.speed.textContent = `${data.tokens_per_second.toFixed(2)} tok/s`;
       refreshMetrics();
       socket.close();

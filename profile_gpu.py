@@ -3,7 +3,7 @@ import argparse
 
 def main():
     parser = argparse.ArgumentParser(description="Profiling GPU di una forward/backward mini_llm.")
-    parser.add_argument("--checkpoint", default="checkpoints/final.pt")
+    parser.add_argument("--checkpoint", default="models/checkpoints/best.pt")
     parser.add_argument("--tokenizer", default="tokenizer/tokenizer.json")
     parser.add_argument("--out_dir", default="data/profiling")
     parser.add_argument("--steps", type=int, default=5)
